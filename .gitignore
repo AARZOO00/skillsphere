@@ -1,7 +1,83 @@
-node_modules
-frontend/node_modules
-backend/node_modules
+# ══════════════════════════════════════════════
+# SkillSphere — .gitignore
+# Place this in: skillsphere-final/ (root)
+# ══════════════════════════════════════════════
+
+# Dependencies — NEVER push these
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+**/node_modules/
+
+# Environment variables — NEVER push these
 .env
-build
-dist
-.cache
+.env.local
+.env.development
+.env.production
+.env.test
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+backend/.env
+backend/.env.local
+
+# Build output
+frontend/build/
+build/
+dist/
+.next/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.project
+.classpath
+
+# Uploads (user uploaded files)
+backend/uploads/
+public/uploads/
+
+# SSL certificates
+*.pem
+*.key
+*.cert
+
+# Misc
+*.tgz
+*.tar.gz
