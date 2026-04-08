@@ -12,7 +12,7 @@ import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword  from './pages/auth/ResetPassword';
 import VerifyEmail    from './pages/auth/VerifyEmail';
 import OAuthSuccess   from './pages/auth/OAuthSuccess';
-import AdminLogin     from './pages/auth/AdminLogin';
+import AdminLogin     from './pages/auth/Adminlogin';
 
 // Main pages
 import GigMarketplace   from './pages/GigMarketplace';
