@@ -16,4 +16,4 @@ const disputeSchema = new mongoose.Schema({
   payment: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' }
 }, { timestamps: true });
 
-module.exports = mongoose.model('Dispute', disputeSchema);
+module.exports = mongoose.models.Dispute || mongoose.model('Dispute', disputeSchema);

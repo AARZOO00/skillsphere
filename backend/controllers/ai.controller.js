@@ -1,5 +1,5 @@
 const Freelancer = require('../models/Freelancer.model');
-const Gig = require('../models/Gig.model');
+const Gig = require('../models/gig.model');
 
 const jaccard = (a, b) => {
   const setA = new Set(a.map(s => s.toLowerCase().trim()));

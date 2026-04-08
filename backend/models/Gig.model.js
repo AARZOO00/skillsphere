@@ -36,7 +36,7 @@ const gigSchema = new mongoose.Schema({
 // Full-text search index
 gigSchema.index({ title: 'text', description: 'text', skills: 'text' });
 
-module.exports = mongoose.model('Gig', gigSchema);
+module.exports = mongoose.models.Gig || mongoose.model('Gig', gigSchema);
 
 
 // ════════════════════════════════════════════════════════════════

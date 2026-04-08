@@ -1,22 +1,42 @@
-const router = require('express').Router();
-const ctrl = require('../controllers/gig.controller');
+const express = require('express');
+const router  = express.Router();
 const { protect, authorize } = require('../middleware/auth.middleware');
-const { upload } = require('../config/cloudinary');
 
-router.get('/',                              ctrl.getGigs);
-router.get('/categories',                    ctrl.getCategories);
-router.get('/my-gigs',                       protect, authorize('client'), ctrl.getMyGigs);
-router.get('/my-bids',                       protect, authorize('freelancer'), ctrl.getMyBids);
-router.get('/:id',                           ctrl.getGig);
-router.post('/',                             protect, authorize('client','admin'), upload.array('attachments', 5), ctrl.createGig);
-router.put('/:id',                           protect, ctrl.updateGig);
-router.put('/:id/progress',                  protect, authorize('freelancer'), ctrl.updateProgress);
-router.delete('/:id',                        protect, ctrl.deleteGig);
+// ── Controller import ─────────────────────────────────────────
+const ctrl = require('../controllers/gig.controller');
+
+// ── Optional: Cloudinary upload ───────────────────────────────
+let upload;
+try {
+  upload = require('../config/cloudinary').upload;
+} catch {
+  const multer = require('multer');
+  upload = multer({ storage: multer.memoryStorage() });
+}
+
+// ── IMPORTANT: Specific routes BEFORE /:id ────────────────────
+
+// Public
+router.get('/categories', ctrl.getCategories);
+router.get('/',           ctrl.getGigs);
+
+// Protected — specific named routes first
+router.get('/my-gigs', protect, authorize('client','admin'), ctrl.getMyGigs);
+router.get('/my-bids', protect, authorize('freelancer'),     ctrl.getMyBids);
+
+// Protected — CRUD
+router.post('/',   protect, authorize('client','admin'), upload.array('attachments', 5), ctrl.createGig);
+router.put('/:id', protect, ctrl.updateGig);
+router.put('/:id/progress', protect, authorize('freelancer'), ctrl.updateProgress);
+router.delete('/:id', protect, ctrl.deleteGig);
+
+// Public single gig
+router.get('/:id', ctrl.getGig);
 
 // Bid routes
-router.post('/:id/bids',                     protect, authorize('freelancer'), ctrl.placeBid);
-router.get('/:id/bids',                      protect, authorize('client','admin'), ctrl.getGigBids);
-router.patch('/:id/bids/:bidId/accept',      protect, authorize('client'), ctrl.acceptBid);
-router.patch('/:id/bids/:bidId/reject',      protect, authorize('client'), ctrl.rejectBid);
+router.post(  '/:id/bids',                 protect, authorize('freelancer'),      ctrl.placeBid);
+router.get(   '/:id/bids',                 protect, authorize('client','admin'),  ctrl.getGigBids);
+router.patch( '/:id/bids/:bidId/accept',   protect, authorize('client'),          ctrl.acceptBid);
+router.patch( '/:id/bids/:bidId/reject',   protect, authorize('client'),          ctrl.rejectBid);
 
 module.exports = router;

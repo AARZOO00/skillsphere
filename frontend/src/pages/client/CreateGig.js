@@ -1,728 +1,509 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
-import toast from 'react-hot-toast';
+import { useSelector } from 'react-redux';
 import api from '../../utils/api';
+import toast from 'react-hot-toast';
+
+const STEPS = [
+  { id: 1, label: 'Basic Info',       icon: '📋', desc: 'Title, category & description' },
+  { id: 2, label: 'Requirements',     icon: '🎯', desc: 'Skills, milestones & timeline' },
+  { id: 3, label: 'Budget & Review',  icon: '💰', desc: 'Pricing and final review' },
+];
 
 const CATEGORIES = [
-  { value: 'webdev', label: 'Web Development', icon: '💻' },
-  { value: 'mobile', label: 'Mobile App', icon: '📱' },
-  { value: 'design', label: 'UI/UX Design', icon: '🎨' },
-  { value: 'datascience', label: 'Data Science', icon: '📊' },
-  { value: 'marketing', label: 'Digital Marketing', icon: '📣' },
-  { value: 'writing', label: 'Content Writing', icon: '✍️' },
-  { value: 'video', label: 'Video Editing', icon: '🎬' },
-  { value: 'devops', label: 'DevOps / Cloud', icon: '⚙️' },
+  { value:'webdev',     label:'Web Development',    icon:'💻' },
+  { value:'mobile',     label:'Mobile App',          icon:'📱' },
+  { value:'design',     label:'UI/UX Design',        icon:'🎨' },
+  { value:'datascience',label:'Data Science',        icon:'📊' },
+  { value:'marketing',  label:'Digital Marketing',   icon:'📣' },
+  { value:'writing',    label:'Content Writing',     icon:'✍️' },
+  { value:'video',      label:'Video Editing',       icon:'🎬' },
+  { value:'devops',     label:'DevOps / Cloud',      icon:'⚙️' },
+  { value:'consulting', label:'Consulting',          icon:'💡' },
 ];
 
-const SKILLS_LIST = [
-  'React.js', 'Node.js', 'MongoDB', 'TypeScript', 'Python', 'Django',
-  'Vue.js', 'Angular', 'AWS', 'Docker', 'Figma', 'Flutter',
-  'GraphQL', 'Firebase', 'PostgreSQL', 'Redis', 'Next.js', 'TailwindCSS',
+const SKILLS_POOL = [
+  'React.js','Node.js','MongoDB','TypeScript','Python','Django',
+  'Vue.js','Angular','AWS','Docker','Figma','Flutter',
+  'GraphQL','Firebase','PostgreSQL','Redis','Next.js','TailwindCSS',
+  'Swift','Kotlin','PHP','Laravel','WordPress','Shopify',
 ];
-
-const STEPS = ['Basic Info', 'Requirements', 'Budget & Timeline', 'Review & Post'];
 
 const CreateGig = () => {
-  const navigate = useNavigate();
-  const { user } = useSelector(s => s.auth);
-  const [step, setStep] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const navigate       = useNavigate();
+  const { user }       = useSelector(s => s.auth || {});
+  const [step,  setStep]  = useState(1);
+  const [saving,setSaving]= useState(false);
   const [skillInput, setSkillInput] = useState('');
+  const [showSkillDrop, setShowSkillDrop] = useState(false);
 
   const [form, setForm] = useState({
-    title: '',
-    category: '',
-    description: '',
+    // Step 1
+    title:        '',
+    category:     '',
+    description:  '',
+    workType:     'remote',
+    visibility:   'public',
+    // Step 2
+    skills:       [],
     requirements: '',
-    skills: [],
-    budget: '',
-    budgetType: 'fixed',
-    deadline: '',
     experienceLevel: 'intermediate',
-    workType: 'remote',
-    allowBids: true,
-    bidDeadline: '',
-    attachments: [],
-    visibility: 'public',
+    deadline:     '',
+    milestones:   [{ title:'', description:'', amount:'', deadline:'' }],
+    allowBids:    true,
+    bidDeadline:  '',
+    // Step 3
+    budget:       '',
+    budgetType:   'fixed',
+    attachments:  [],
   });
 
-  const update = (key, val) => setForm(f => ({ ...f, [key]: val }));
+  const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
-  const addSkill = (skill) => {
-    if (!form.skills.includes(skill) && form.skills.length < 10) {
-      update('skills', [...form.skills, skill]);
+  // Skills helpers
+  const addSkill = (s) => {
+    if (!form.skills.includes(s) && form.skills.length < 12) {
+      set('skills', [...form.skills, s]);
     }
-    setSkillInput('');
+    setSkillInput(''); setShowSkillDrop(false);
+  };
+  const removeSkill = (s) => set('skills', form.skills.filter(x => x !== s));
+  const filteredSkills = SKILLS_POOL.filter(s => s.toLowerCase().includes(skillInput.toLowerCase()) && !form.skills.includes(s));
+
+  // Milestone helpers
+  const addMilestone = () => {
+    if (form.milestones.length >= 5) { toast.error('Max 5 milestones'); return; }
+    set('milestones', [...form.milestones, { title:'', description:'', amount:'', deadline:'' }]);
+  };
+  const updateMilestone = (i, key, val) => {
+    const updated = form.milestones.map((m, idx) => idx === i ? { ...m, [key]: val } : m);
+    set('milestones', updated);
+  };
+  const removeMilestone = (i) => {
+    if (form.milestones.length === 1) return;
+    set('milestones', form.milestones.filter((_,idx) => idx !== i));
   };
 
-  const removeSkill = (skill) => update('skills', form.skills.filter(s => s !== skill));
-
-  const filteredSkills = SKILLS_LIST.filter(
-    s => s.toLowerCase().includes(skillInput.toLowerCase()) && !form.skills.includes(s)
-  );
-
-  const validateStep = () => {
-    if (step === 0) {
-      if (!form.title.trim()) { toast.error('Please enter a title'); return false; }
-      if (!form.category) { toast.error('Please select a category'); return false; }
-      if (!form.description.trim() || form.description.length < 50) {
-        toast.error('Description must be at least 50 characters'); return false;
-      }
-    }
+  // Validation
+  const validate = () => {
     if (step === 1) {
-      if (form.skills.length === 0) { toast.error('Add at least one skill'); return false; }
+      if (!form.title.trim())    { toast.error('Add a title'); return false; }
+      if (!form.category)        { toast.error('Select a category'); return false; }
+      if (form.description.length < 40) { toast.error('Description needs at least 40 characters'); return false; }
     }
     if (step === 2) {
+      if (form.skills.length === 0) { toast.error('Add at least one skill'); return false; }
+      if (!form.deadline)           { toast.error('Set a project deadline'); return false; }
+    }
+    if (step === 3) {
       if (!form.budget || isNaN(form.budget)) { toast.error('Enter a valid budget'); return false; }
-      if (!form.deadline) { toast.error('Please set a deadline'); return false; }
     }
     return true;
   };
 
-  const nextStep = () => { if (validateStep()) setStep(s => Math.min(s + 1, 3)); };
-  const prevStep = () => setStep(s => Math.max(s - 1, 0));
+  const next = () => { if (validate()) setStep(s => Math.min(s + 1, 3)); };
+  const prev = () => setStep(s => Math.max(s - 1, 1));
 
   const handleSubmit = async () => {
-    setLoading(true);
+    if (!validate()) return;
+    setSaving(true);
     try {
-      const res = await api.post('/gigs', {
+      const payload = {
         ...form,
         budget: Number(form.budget),
-        postedBy: user._id,
-      });
-      toast.success('🎉 Gig posted successfully! Freelancers will be notified.');
+        milestones: form.milestones.filter(m => m.title.trim()),
+      };
+      await api.post('/gigs', payload);
+      toast.success('🎉 Job posted! Freelancers have been notified.');
       navigate('/my-gigs');
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to post gig');
+      toast.error(err?.response?.data?.message || 'Failed to post job');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  // ─── Styles ───────────────────────────────────────────────────────────────
-  const card = {
-    background: 'linear-gradient(145deg, #151e2e, #111827)',
-    border: '1px solid rgba(255,255,255,0.07)',
-    borderRadius: 20,
-    boxShadow: '0 4px 30px rgba(0,0,0,0.4)',
-  };
+  // ── Styles ──────────────────────────────────────────────────
+  const card   = { background:'#fff', border:'1px solid #e5e7eb', borderRadius:16, padding:24, boxShadow:'0 2px 8px rgba(0,0,0,0.04)' };
+  const label  = { display:'block', fontSize:13, fontWeight:600, color:'#374151', marginBottom:6 };
+  const input  = { width:'100%', padding:'10px 14px', background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:10, color:'#111827', fontSize:14, fontFamily:'inherit', outline:'none', boxSizing:'border-box', transition:'border-color 0.2s' };
+  const fi = e => e.target.style.borderColor='#4f46e5';
+  const bi = e => e.target.style.borderColor='#e5e7eb';
 
-  const inputStyle = {
-    width: '100%', padding: '12px 16px', boxSizing: 'border-box',
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 12, color: '#F1F5F9',
-    fontSize: 14, fontFamily: 'Plus Jakarta Sans, sans-serif',
-    outline: 'none', transition: 'border-color 0.2s, box-shadow 0.2s',
-  };
-
-  const labelStyle = {
-    display: 'block', fontSize: 13, fontWeight: 600,
-    color: '#94A3B8', marginBottom: 8, letterSpacing: 0.2,
-  };
-
-  const sectionTitle = {
-    fontSize: 15, fontWeight: 700, color: '#F1F5F9', marginBottom: 18,
-    paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.06)',
-    display: 'flex', alignItems: 'center', gap: 8,
-  };
+  const totalMilestoneAmt = form.milestones.reduce((a,m) => a + (Number(m.amount)||0), 0);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0B0F1A', padding: '32px 24px', fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
-      <div style={{ maxWidth: 820, margin: '0 auto' }}>
+    <div style={{ minHeight:'100vh', background:'#f8fafc', fontFamily:"'Plus Jakarta Sans',sans-serif" }}>
 
-        {/* ── Header ── */}
-        <div style={{ marginBottom: 32 }}>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 12,
-            background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)',
-            borderRadius: 999, padding: '4px 14px', fontSize: 12, fontWeight: 600, color: '#818CF8',
-          }}>📌 Post a New Gig</div>
-          <h1 style={{
-            fontSize: 28, fontWeight: 800, fontFamily: 'Syne, Plus Jakarta Sans, sans-serif',
-            background: 'linear-gradient(135deg, #F1F5F9, #94A3B8)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-            marginBottom: 6,
-          }}>Create a Job Posting</h1>
-          <p style={{ color: '#64748B', fontSize: 14 }}>Fill in the details below. Freelancers will receive instant notifications.</p>
+      {/* ── HEADER ── */}
+      <div style={{ background:'linear-gradient(135deg,#1e1b4b,#312e81,#1e40af)', padding:'32px 52px 72px', position:'relative', overflow:'hidden' }}>
+        <div style={{ position:'absolute', inset:0, backgroundImage:'radial-gradient(circle at 80% 50%, rgba(99,102,241,0.15) 0%, transparent 50%)', pointerEvents:'none' }} />
+        <div style={{ maxWidth:860, margin:'0 auto', position:'relative', zIndex:1 }}>
+          <p style={{ color:'#a5b4fc', fontSize:13, marginBottom:8 }}>Client · Post a Job</p>
+          <h1 style={{ fontSize:28, fontWeight:900, color:'#fff', fontFamily:'Syne, sans-serif', marginBottom:4 }}>Create Job Posting</h1>
+          <p style={{ color:'#a5b4fc', fontSize:14 }}>Fill in the details below. Verified freelancers will be notified instantly.</p>
         </div>
+      </div>
 
-        {/* ── Stepper ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 32 }}>
+      <div style={{ maxWidth:860, margin:'-48px auto 0', padding:'0 24px 60px', position:'relative', zIndex:2 }}>
+
+        {/* ── STEPPER ── */}
+        <div style={{ ...card, padding:'20px 28px', marginBottom:20, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           {STEPS.map((s, i) => (
-            <React.Fragment key={i}>
-              <div
-                onClick={() => i < step && setStep(i)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  cursor: i < step ? 'pointer' : 'default',
-                }}
-              >
+            <React.Fragment key={s.id}>
+              <div style={{ display:'flex', alignItems:'center', gap:12, cursor: s.id < step ? 'pointer' : 'default' }} onClick={() => s.id < step && setStep(s.id)}>
                 <div style={{
-                  width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 13, fontWeight: 700,
-                  background: i < step
-                    ? 'linear-gradient(135deg, #6366F1, #22D3EE)'
-                    : i === step
-                      ? 'rgba(99,102,241,0.2)'
-                      : 'rgba(255,255,255,0.05)',
-                  border: i === step ? '2px solid #6366F1' : i < step ? 'none' : '1px solid rgba(255,255,255,0.1)',
-                  color: i <= step ? '#fff' : '#475569',
-                  boxShadow: i === step ? '0 0 16px rgba(99,102,241,0.4)' : 'none',
-                  transition: 'all 0.3s',
+                  width:42, height:42, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+                  fontSize: s.id < step ? 18 : 15, fontWeight:700, flexShrink:0,
+                  background: s.id < step ? '#dcfce7' : s.id === step ? 'linear-gradient(135deg,#4f46e5,#6366F1)' : '#f1f5f9',
+                  color:      s.id < step ? '#16a34a' : s.id === step ? '#fff' : '#9ca3af',
+                  boxShadow:  s.id === step ? '0 4px 14px rgba(79,70,229,0.35)' : 'none',
+                  border:     s.id === step ? '3px solid #e0e7ff' : '3px solid transparent',
+                  transition:'all 0.3s',
                 }}>
-                  {i < step ? '✓' : i + 1}
+                  {s.id < step ? '✓' : s.icon}
                 </div>
-                <span style={{
-                  fontSize: 13, fontWeight: 600,
-                  color: i === step ? '#818CF8' : i < step ? '#4ade80' : '#475569',
-                  whiteSpace: 'nowrap',
-                }}>{s}</span>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700, color: s.id === step ? '#4f46e5' : s.id < step ? '#16a34a' : '#9ca3af' }}>{s.label}</div>
+                  <div style={{ fontSize:11, color:'#9ca3af' }}>{s.desc}</div>
+                </div>
               </div>
               {i < STEPS.length - 1 && (
-                <div style={{
-                  flex: 1, height: 2, margin: '0 10px',
-                  background: i < step
-                    ? 'linear-gradient(90deg, #6366F1, #22D3EE)'
-                    : 'rgba(255,255,255,0.07)',
-                  transition: 'background 0.4s',
-                }} />
+                <div style={{ flex:1, height:2, margin:'0 16px', background: step > s.id ? '#4f46e5' : '#e5e7eb', borderRadius:1, transition:'background 0.4s' }} />
               )}
             </React.Fragment>
           ))}
         </div>
 
-        {/* ── STEP 0: Basic Info ── */}
-        {step === 0 && (
-          <div style={{ ...card, padding: 32 }}>
-            <div style={sectionTitle}>✏️ Basic Information</div>
+        {/* ══ STEP 1: Basic Info ══ */}
+        {step === 1 && (
+          <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+            <div style={card}>
+              <h2 style={{ fontSize:16, fontWeight:800, color:'#111827', marginBottom:20 }}>📋 Basic Information</h2>
 
-            <div style={{ marginBottom: 22 }}>
-              <label style={labelStyle}>Gig Title *</label>
-              <input
-                style={inputStyle}
-                placeholder="e.g. Build a full-stack e-commerce app with React and Node.js"
-                value={form.title}
-                onChange={e => update('title', e.target.value)}
-                maxLength={120}
-                onFocus={e => { e.target.style.borderColor = '#6366F1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; }}
-                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; }}
-              />
-              <div style={{ fontSize: 11, color: '#475569', marginTop: 4, textAlign: 'right' }}>
-                {form.title.length}/120
+              <div style={{ marginBottom:18 }}>
+                <label style={label}>Job Title *</label>
+                <input style={input} value={form.title} onChange={e=>set('title',e.target.value)} onFocus={fi} onBlur={bi} placeholder="e.g. Build a full-stack e-commerce app with React and Node.js" maxLength={120} />
+                <div style={{ textAlign:'right', fontSize:11, color:'#9ca3af', marginTop:4 }}>{form.title.length}/120</div>
               </div>
-            </div>
 
-            <div style={{ marginBottom: 22 }}>
-              <label style={labelStyle}>Category *</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-                {CATEGORIES.map(cat => (
-                  <button
-                    key={cat.value}
-                    type="button"
-                    onClick={() => update('category', cat.value)}
-                    style={{
-                      padding: '12px 8px', borderRadius: 12, cursor: 'pointer',
-                      fontFamily: 'Plus Jakarta Sans, sans-serif',
-                      background: form.category === cat.value ? 'rgba(99,102,241,0.18)' : 'rgba(255,255,255,0.03)',
-                      border: `1.5px solid ${form.category === cat.value ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                      transition: 'all 0.2s', textAlign: 'center',
-                    }}
-                  >
-                    <div style={{ fontSize: 20, marginBottom: 4 }}>{cat.icon}</div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: form.category === cat.value ? '#818CF8' : '#64748B' }}>{cat.label}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 22 }}>
-              <label style={labelStyle}>Description * <span style={{ color: '#475569', fontWeight: 400 }}>(min. 50 chars)</span></label>
-              <textarea
-                style={{ ...inputStyle, minHeight: 140, resize: 'vertical', lineHeight: 1.7 }}
-                placeholder="Describe the project in detail — what needs to be built, key features, tech stack preferences, and expected deliverables..."
-                value={form.description}
-                onChange={e => update('description', e.target.value)}
-                onFocus={e => { e.target.style.borderColor = '#6366F1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; }}
-                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                <span style={{ fontSize: 11, color: form.description.length >= 50 ? '#4ade80' : '#F59E0B' }}>
-                  {form.description.length >= 50 ? '✓ Good length' : `${50 - form.description.length} more chars needed`}
-                </span>
-                <span style={{ fontSize: 11, color: '#475569' }}>{form.description.length} chars</span>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <div>
-                <label style={labelStyle}>Work Type</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[['remote', '🌍 Remote'], ['onsite', '🏢 On-site'], ['hybrid', '🔀 Hybrid']].map(([val, label]) => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => update('workType', val)}
-                      style={{
-                        flex: 1, padding: '9px 4px', borderRadius: 10, cursor: 'pointer',
-                        fontFamily: 'Plus Jakarta Sans, sans-serif',
-                        fontSize: 12, fontWeight: 600,
-                        background: form.workType === val ? 'rgba(34,211,238,0.12)' : 'rgba(255,255,255,0.03)',
-                        border: `1px solid ${form.workType === val ? 'rgba(34,211,238,0.35)' : 'rgba(255,255,255,0.08)'}`,
-                        color: form.workType === val ? '#22D3EE' : '#64748B',
-                        transition: 'all 0.2s',
-                      }}
-                    >{label}</button>
+              <div style={{ marginBottom:18 }}>
+                <label style={label}>Category *</label>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
+                  {CATEGORIES.map(cat => (
+                    <button key={cat.value} type="button" onClick={()=>set('category',cat.value)} style={{
+                      padding:'12px 10px', borderRadius:12, cursor:'pointer', fontFamily:'inherit', textAlign:'center', transition:'all 0.2s',
+                      background: form.category===cat.value ? '#f5f3ff' : '#f8fafc',
+                      border:     `1.5px solid ${form.category===cat.value ? '#4f46e5' : '#e5e7eb'}`,
+                      boxShadow:  form.category===cat.value ? '0 0 0 3px rgba(79,70,229,0.12)' : 'none',
+                    }}>
+                      <div style={{ fontSize:20, marginBottom:4 }}>{cat.icon}</div>
+                      <div style={{ fontSize:12, fontWeight:600, color: form.category===cat.value ? '#4f46e5' : '#6b7280' }}>{cat.label}</div>
+                    </button>
                   ))}
                 </div>
               </div>
-              <div>
-                <label style={labelStyle}>Visibility</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[['public', '🌐 Public'], ['private', '🔒 Private']].map(([val, label]) => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => update('visibility', val)}
-                      style={{
-                        flex: 1, padding: '9px 4px', borderRadius: 10, cursor: 'pointer',
-                        fontFamily: 'Plus Jakarta Sans, sans-serif',
-                        fontSize: 12, fontWeight: 600,
-                        background: form.visibility === val ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
-                        border: `1px solid ${form.visibility === val ? 'rgba(99,102,241,0.35)' : 'rgba(255,255,255,0.08)'}`,
-                        color: form.visibility === val ? '#818CF8' : '#64748B',
-                        transition: 'all 0.2s',
-                      }}
-                    >{label}</button>
-                  ))}
+
+              <div style={{ marginBottom:18 }}>
+                <label style={label}>Description * <span style={{ color:'#9ca3af', fontWeight:400 }}>(min. 40 chars)</span></label>
+                <textarea style={{ ...input, minHeight:120, resize:'vertical', lineHeight:1.7 }} value={form.description} onChange={e=>set('description',e.target.value)} onFocus={fi} onBlur={bi} placeholder="Describe the project in detail — what needs to be built, key features, tech stack preferences, expected deliverables..." />
+                <div style={{ display:'flex', justifyContent:'space-between', marginTop:4 }}>
+                  <span style={{ fontSize:11, color: form.description.length>=40 ? '#16a34a':'#f59e0b', fontWeight:500 }}>{form.description.length>=40 ? '✓ Good length' : `${40-form.description.length} more chars needed`}</span>
+                  <span style={{ fontSize:11, color:'#9ca3af' }}>{form.description.length} chars</span>
+                </div>
+              </div>
+
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+                <div>
+                  <label style={label}>Work Type</label>
+                  <div style={{ display:'flex', gap:8 }}>
+                    {[['remote','🌍 Remote'],['onsite','🏢 On-site'],['hybrid','🔀 Hybrid']].map(([v,l])=>(
+                      <button key={v} type="button" onClick={()=>set('workType',v)} style={{ flex:1, padding:'9px 4px', borderRadius:10, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:600, transition:'all 0.2s', background:form.workType===v?'#ede9fe':'#f8fafc', border:`1px solid ${form.workType===v?'#4f46e5':'#e5e7eb'}`, color:form.workType===v?'#4f46e5':'#6b7280' }}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={label}>Visibility</label>
+                  <div style={{ display:'flex', gap:8 }}>
+                    {[['public','🌐 Public'],['private','🔒 Private']].map(([v,l])=>(
+                      <button key={v} type="button" onClick={()=>set('visibility',v)} style={{ flex:1, padding:'9px 4px', borderRadius:10, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:600, transition:'all 0.2s', background:form.visibility===v?'#ede9fe':'#f8fafc', border:`1px solid ${form.visibility===v?'#4f46e5':'#e5e7eb'}`, color:form.visibility===v?'#4f46e5':'#6b7280' }}>{l}</button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── STEP 1: Requirements ── */}
-        {step === 1 && (
-          <div style={{ ...card, padding: 32 }}>
-            <div style={sectionTitle}>📋 Project Requirements</div>
+        {/* ══ STEP 2: Requirements ══ */}
+        {step === 2 && (
+          <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
 
-            <div style={{ marginBottom: 22 }}>
-              <label style={labelStyle}>Detailed Requirements</label>
-              <textarea
-                style={{ ...inputStyle, minHeight: 130, resize: 'vertical', lineHeight: 1.7 }}
-                placeholder="List specific requirements:&#10;• Responsive design for mobile and desktop&#10;• User authentication with JWT&#10;• REST API integration&#10;• Payment gateway..."
-                value={form.requirements}
-                onChange={e => update('requirements', e.target.value)}
-                onFocus={e => { e.target.style.borderColor = '#6366F1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; }}
-                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; }}
-              />
+            {/* Skills */}
+            <div style={card}>
+              <h2 style={{ fontSize:16, fontWeight:800, color:'#111827', marginBottom:18 }}>🎯 Skills & Requirements</h2>
+
+              <div style={{ marginBottom:20 }}>
+                <label style={label}>Required Skills * <span style={{ color:'#9ca3af', fontWeight:400 }}>(max 12)</span></label>
+                {form.skills.length > 0 && (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginBottom:10 }}>
+                    {form.skills.map(s=>(
+                      <span key={s} style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:13, fontWeight:600, padding:'5px 12px', borderRadius:999, background:'#ede9fe', color:'#7c3aed', border:'1px solid #ddd6fe' }}>
+                        {s}
+                        <button onClick={()=>removeSkill(s)} style={{ background:'none', border:'none', cursor:'pointer', color:'#a78bfa', fontSize:15, lineHeight:1, padding:0 }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ position:'relative' }}>
+                  <input style={input} placeholder="Search and add skills…" value={skillInput}
+                    onChange={e=>{ setSkillInput(e.target.value); setShowSkillDrop(true); }}
+                    onFocus={()=>setShowSkillDrop(true)}
+                    onBlur={()=>setTimeout(()=>setShowSkillDrop(false),200)}
+                    onKeyDown={e=>{ if(e.key==='Enter'&&skillInput.trim()){ e.preventDefault(); addSkill(skillInput.trim()); } }}
+                  />
+                  {showSkillDrop && skillInput && filteredSkills.length > 0 && (
+                    <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:50, background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, boxShadow:'0 8px 24px rgba(0,0,0,0.1)', maxHeight:180, overflowY:'auto', marginTop:4 }}>
+                      {filteredSkills.slice(0,6).map(s=>(
+                        <div key={s} onMouseDown={()=>addSkill(s)} style={{ padding:'10px 16px', fontSize:14, color:'#374151', cursor:'pointer', transition:'background 0.15s', borderBottom:'1px solid #f9fafb' }}
+                          onMouseEnter={e=>e.target.style.background='#f5f3ff'}
+                          onMouseLeave={e=>e.target.style.background='transparent'}>
+                          + {s}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div style={{ marginTop:10, display:'flex', flexWrap:'wrap', gap:6 }}>
+                  {SKILLS_POOL.filter(s=>!form.skills.includes(s)).slice(0,8).map(s=>(
+                    <button key={s} onClick={()=>addSkill(s)} style={{ padding:'5px 12px', borderRadius:999, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:'inherit', background:'#f8fafc', border:'1px solid #e5e7eb', color:'#6b7280', transition:'all 0.15s' }}
+                      onMouseEnter={e=>{ e.target.style.background='#f5f3ff'; e.target.style.color='#7c3aed'; e.target.style.borderColor='#ddd6fe'; }}
+                      onMouseLeave={e=>{ e.target.style.background='#f8fafc'; e.target.style.color='#6b7280'; e.target.style.borderColor='#e5e7eb'; }}>
+                      + {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom:18 }}>
+                <label style={label}>Detailed Requirements</label>
+                <textarea style={{ ...input, minHeight:100, resize:'vertical', lineHeight:1.7 }} value={form.requirements} onChange={e=>set('requirements',e.target.value)} onFocus={fi} onBlur={bi} placeholder="List specific requirements:&#10;• Responsive design for mobile and desktop&#10;• User authentication with JWT&#10;• Payment gateway integration" />
+              </div>
+
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+                <div>
+                  <label style={label}>Experience Level</label>
+                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                    {[['beginner','🌱 Beginner','0–1 years'],['intermediate','⚡ Intermediate','2–4 years'],['expert','🏆 Expert','5+ years']].map(([v,l,sub])=>(
+                      <div key={v} onClick={()=>set('experienceLevel',v)} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:10, cursor:'pointer', transition:'all 0.2s', background:form.experienceLevel===v?'#f5f3ff':'#f8fafc', border:`1.5px solid ${form.experienceLevel===v?'#4f46e5':'#e5e7eb'}` }}>
+                        <div style={{ width:16, height:16, borderRadius:'50%', flexShrink:0, background:form.experienceLevel===v?'#4f46e5':'transparent', border:form.experienceLevel===v?'none':'2px solid #d1d5db', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                          {form.experienceLevel===v && <div style={{ width:5, height:5, borderRadius:'50%', background:'#fff' }} />}
+                        </div>
+                        <div>
+                          <div style={{ fontSize:13, fontWeight:600, color:form.experienceLevel===v?'#4f46e5':'#374151' }}>{l}</div>
+                          <div style={{ fontSize:11, color:'#9ca3af' }}>{sub}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ marginBottom:16 }}>
+                    <label style={label}>Project Deadline *</label>
+                    <input type="date" style={{ ...input, colorScheme:'light' }} value={form.deadline} onChange={e=>set('deadline',e.target.value)} onFocus={fi} onBlur={bi} min={new Date().toISOString().split('T')[0]} />
+                  </div>
+                  <div>
+                    <label style={label}>Bid Submission Deadline</label>
+                    <input type="date" style={{ ...input, colorScheme:'light' }} value={form.bidDeadline} onChange={e=>set('bidDeadline',e.target.value)} onFocus={fi} onBlur={bi} min={new Date().toISOString().split('T')[0]} />
+                  </div>
+                  <div style={{ marginTop:14 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 14px', background:'#f8fafc', borderRadius:10, border:'1px solid #e5e7eb', cursor:'pointer' }} onClick={()=>set('allowBids',!form.allowBids)}>
+                      <span style={{ fontSize:13, fontWeight:600, color:'#374151' }}>Allow freelancer bids</span>
+                      <div style={{ width:44, height:22, borderRadius:999, background:form.allowBids?'#4f46e5':'#e5e7eb', position:'relative', transition:'background 0.3s' }}>
+                        <div style={{ position:'absolute', top:2, left:form.allowBids?23:2, width:18, height:18, borderRadius:'50%', background:'#fff', transition:'left 0.3s', boxShadow:'0 1px 4px rgba(0,0,0,0.2)' }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div style={{ marginBottom: 22 }}>
-              <label style={labelStyle}>Required Skills * <span style={{ color: '#475569', fontWeight: 400 }}>(max 10)</span></label>
+            {/* Milestones */}
+            <div style={card}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+                <div>
+                  <h2 style={{ fontSize:16, fontWeight:800, color:'#111827', marginBottom:2 }}>🏁 Project Milestones</h2>
+                  <p style={{ fontSize:12, color:'#9ca3af' }}>Break project into smaller deliverables (optional, max 5)</p>
+                </div>
+                <button onClick={addMilestone} style={{ padding:'8px 16px', borderRadius:10, background:'#f5f3ff', border:'1px solid #ede9fe', color:'#4f46e5', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>+ Add</button>
+              </div>
 
-              {/* Selected skills */}
-              {form.skills.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                  {form.skills.map(skill => (
-                    <span key={skill} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      background: 'rgba(99,102,241,0.15)',
-                      border: '1px solid rgba(99,102,241,0.35)',
-                      color: '#818CF8', fontSize: 13, fontWeight: 600,
-                      padding: '5px 12px', borderRadius: 999,
-                    }}>
-                      {skill}
-                      <button
-                        onClick={() => removeSkill(skill)}
-                        style={{ background: 'none', border: 'none', color: '#6366F1', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}
-                      >×</button>
-                    </span>
-                  ))}
+              {form.milestones.map((m,i)=>(
+                <div key={i} style={{ background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:14, padding:18, marginBottom:12, position:'relative' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+                    <div style={{ width:24, height:24, borderRadius:'50%', background:'#4f46e5', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, flexShrink:0 }}>{i+1}</div>
+                    <span style={{ fontSize:14, fontWeight:700, color:'#374151' }}>Milestone {i+1}</span>
+                    {form.milestones.length > 1 && (
+                      <button onClick={()=>removeMilestone(i)} style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer', color:'#ef4444', fontSize:18, lineHeight:1 }}>×</button>
+                    )}
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                    <div style={{ gridColumn:'1/-1' }}>
+                      <label style={{ ...label, fontSize:12 }}>Milestone Title</label>
+                      <input style={{ ...input, fontSize:13 }} value={m.title} onChange={e=>updateMilestone(i,'title',e.target.value)} onFocus={fi} onBlur={bi} placeholder="e.g. UI Design Mockups" />
+                    </div>
+                    <div>
+                      <label style={{ ...label, fontSize:12 }}>Amount (₹)</label>
+                      <input type="number" style={{ ...input, fontSize:13 }} value={m.amount} onChange={e=>updateMilestone(i,'amount',e.target.value)} onFocus={fi} onBlur={bi} placeholder="0" />
+                    </div>
+                    <div>
+                      <label style={{ ...label, fontSize:12 }}>Due Date</label>
+                      <input type="date" style={{ ...input, fontSize:13, colorScheme:'light' }} value={m.deadline} onChange={e=>updateMilestone(i,'deadline',e.target.value)} onFocus={fi} onBlur={bi} />
+                    </div>
+                    <div style={{ gridColumn:'1/-1' }}>
+                      <label style={{ ...label, fontSize:12 }}>Description</label>
+                      <input style={{ ...input, fontSize:13 }} value={m.description} onChange={e=>updateMilestone(i,'description',e.target.value)} onFocus={fi} onBlur={bi} placeholder="What will be delivered in this milestone?" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {totalMilestoneAmt > 0 && (
+                <div style={{ padding:'12px 16px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <span style={{ fontSize:13, color:'#15803d' }}>Total milestone amount:</span>
+                  <span style={{ fontSize:16, fontWeight:800, color:'#15803d' }}>₹{totalMilestoneAmt.toLocaleString()}</span>
                 </div>
               )}
-
-              {/* Skill input */}
-              <div style={{ position: 'relative' }}>
-                <input
-                  style={inputStyle}
-                  placeholder="Type to search skills and press Enter..."
-                  value={skillInput}
-                  onChange={e => setSkillInput(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && skillInput.trim()) {
-                      e.preventDefault();
-                      addSkill(skillInput.trim());
-                    }
-                  }}
-                  onFocus={e => { e.target.style.borderColor = '#6366F1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; }}
-                  onBlur={e => { setTimeout(() => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; }, 200); }}
-                />
-                {skillInput && filteredSkills.length > 0 && (
-                  <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
-                    background: '#1a2540',
-                    border: '1px solid rgba(99,102,241,0.3)',
-                    borderRadius: 12, marginTop: 4,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                    maxHeight: 200, overflowY: 'auto',
-                  }}>
-                    {filteredSkills.slice(0, 6).map(skill => (
-                      <div
-                        key={skill}
-                        onMouseDown={() => addSkill(skill)}
-                        style={{
-                          padding: '10px 16px', cursor: 'pointer',
-                          fontSize: 14, color: '#94A3B8',
-                          transition: 'background 0.15s',
-                          borderBottom: '1px solid rgba(255,255,255,0.05)',
-                        }}
-                        onMouseEnter={e => { e.target.style.background = 'rgba(99,102,241,0.12)'; e.target.style.color = '#818CF8'; }}
-                        onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = '#94A3B8'; }}
-                      >+ {skill}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Quick add popular skills */}
-              <div style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Quick add:</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {SKILLS_LIST.filter(s => !form.skills.includes(s)).slice(0, 8).map(skill => (
-                    <button
-                      key={skill}
-                      type="button"
-                      onClick={() => addSkill(skill)}
-                      style={{
-                        padding: '5px 12px', borderRadius: 999, cursor: 'pointer',
-                        fontFamily: 'Plus Jakarta Sans, sans-serif',
-                        fontSize: 12, fontWeight: 500,
-                        background: 'rgba(255,255,255,0.04)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        color: '#64748B', transition: 'all 0.15s',
-                      }}
-                      onMouseEnter={e => { e.target.style.background = 'rgba(99,102,241,0.1)'; e.target.style.color = '#818CF8'; e.target.style.borderColor = 'rgba(99,102,241,0.3)'; }}
-                      onMouseLeave={e => { e.target.style.background = 'rgba(255,255,255,0.04)'; e.target.style.color = '#64748B'; e.target.style.borderColor = 'rgba(255,255,255,0.1)'; }}
-                    >+ {skill}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label style={labelStyle}>Experience Level Required</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                {[
-                  { value: 'beginner', icon: '🌱', label: 'Beginner', sub: '0–1 years' },
-                  { value: 'intermediate', icon: '⚡', label: 'Intermediate', sub: '2–4 years' },
-                  { value: 'expert', icon: '🏆', label: 'Expert', sub: '5+ years' },
-                ].map(lvl => (
-                  <button
-                    key={lvl.value}
-                    type="button"
-                    onClick={() => update('experienceLevel', lvl.value)}
-                    style={{
-                      padding: '16px 12px', borderRadius: 12, cursor: 'pointer',
-                      fontFamily: 'Plus Jakarta Sans, sans-serif', textAlign: 'center',
-                      background: form.experienceLevel === lvl.value ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)',
-                      border: `1.5px solid ${form.experienceLevel === lvl.value ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    <div style={{ fontSize: 22, marginBottom: 4 }}>{lvl.icon}</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: form.experienceLevel === lvl.value ? '#818CF8' : '#94A3B8', marginBottom: 2 }}>{lvl.label}</div>
-                    <div style={{ fontSize: 11, color: '#475569' }}>{lvl.sub}</div>
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
         )}
 
-        {/* ── STEP 2: Budget & Timeline ── */}
-        {step === 2 && (
-          <div style={{ ...card, padding: 32 }}>
-            <div style={sectionTitle}>💰 Budget & Timeline</div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 22 }}>
-              <div>
-                <label style={labelStyle}>Budget Type</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[['fixed', '💎 Fixed Price'], ['hourly', '⏱ Hourly Rate']].map(([val, label]) => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => update('budgetType', val)}
-                      style={{
-                        flex: 1, padding: '11px 8px', borderRadius: 12, cursor: 'pointer',
-                        fontFamily: 'Plus Jakarta Sans, sans-serif',
-                        fontSize: 13, fontWeight: 600,
-                        background: form.budgetType === val ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)',
-                        border: `1.5px solid ${form.budgetType === val ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                        color: form.budgetType === val ? '#818CF8' : '#64748B',
-                        transition: 'all 0.2s',
-                      }}
-                    >{label}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label style={labelStyle}>
-                  {form.budgetType === 'fixed' ? 'Budget (₹) *' : 'Hourly Rate (₹/hr) *'}
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#6366F1', fontWeight: 700, fontSize: 15 }}>₹</span>
-                  <input
-                    type="number"
-                    style={{ ...inputStyle, paddingLeft: 30 }}
-                    placeholder={form.budgetType === 'fixed' ? '50000' : '1500'}
-                    value={form.budget}
-                    onChange={e => update('budget', e.target.value)}
-                    min="0"
-                    onFocus={e => { e.target.style.borderColor = '#6366F1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; }}
-                    onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 22 }}>
-              <div>
-                <label style={labelStyle}>Project Deadline *</label>
-                <input
-                  type="date"
-                  style={{ ...inputStyle, colorScheme: 'dark' }}
-                  value={form.deadline}
-                  onChange={e => update('deadline', e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                  onFocus={e => { e.target.style.borderColor = '#6366F1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; }}
-                  onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; }}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>Bid Submission Deadline</label>
-                <input
-                  type="date"
-                  style={{ ...inputStyle, colorScheme: 'dark' }}
-                  value={form.bidDeadline}
-                  onChange={e => update('bidDeadline', e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                  onFocus={e => { e.target.style.borderColor = '#6366F1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; }}
-                  onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; }}
-                />
-              </div>
-            </div>
-
-            {/* Allow Bids toggle */}
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: 20, background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14,
-              marginBottom: 16,
-            }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#E2E8F0', marginBottom: 3 }}>Allow Freelancers to Bid</div>
-                <div style={{ fontSize: 12, color: '#64748B' }}>Freelancers can place competitive bids on this gig</div>
-              </div>
-              <div
-                onClick={() => update('allowBids', !form.allowBids)}
-                style={{
-                  width: 52, height: 28, borderRadius: 999, cursor: 'pointer',
-                  background: form.allowBids ? 'linear-gradient(135deg, #6366F1, #22D3EE)' : 'rgba(255,255,255,0.1)',
-                  position: 'relative', transition: 'background 0.3s',
-                  boxShadow: form.allowBids ? '0 0 12px rgba(99,102,241,0.4)' : 'none',
-                }}
-              >
-                <div style={{
-                  position: 'absolute', top: 3, left: form.allowBids ? 27 : 3,
-                  width: 22, height: 22, borderRadius: '50%', background: '#fff',
-                  transition: 'left 0.3s', boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-                }} />
-              </div>
-            </div>
-
-            {/* Budget estimate info */}
-            {form.budget && (
-              <div style={{
-                padding: 18,
-                background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(34,211,238,0.05))',
-                border: '1px solid rgba(99,102,241,0.2)', borderRadius: 14,
-              }}>
-                <div style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>💡 Budget Overview</div>
-                <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-                  <div>
-                    <div style={{ fontSize: 22, fontWeight: 800, background: 'linear-gradient(135deg, #6366F1, #22D3EE)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontFamily: 'Syne, Plus Jakarta Sans, sans-serif' }}>
-                      ₹{Number(form.budget).toLocaleString()}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#64748B' }}>{form.budgetType === 'fixed' ? 'Total Budget' : 'Per Hour'}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: '#4ade80', fontFamily: 'Syne, Plus Jakarta Sans, sans-serif' }}>
-                      ₹{Math.round(Number(form.budget) * 0.9).toLocaleString()}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#64748B' }}>You receive (after 10% fee)</div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── STEP 3: Review ── */}
+        {/* ══ STEP 3: Budget & Review ══ */}
         {step === 3 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-            {/* Review card */}
-            <div style={{ ...card, padding: 28 }}>
-              <div style={sectionTitle}>👁 Review Your Posting</div>
-
-              <div style={{
-                background: 'rgba(255,255,255,0.03)', borderRadius: 14,
-                padding: 20, marginBottom: 20,
-                border: '1px solid rgba(255,255,255,0.07)',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-                  <div>
-                    <h3 style={{ fontSize: 18, fontWeight: 800, color: '#F1F5F9', marginBottom: 6, fontFamily: 'Syne, Plus Jakarta Sans, sans-serif' }}>
-                      {form.title || 'Untitled Gig'}
-                    </h3>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ background: 'rgba(99,102,241,0.12)', color: '#818CF8', border: '1px solid rgba(99,102,241,0.25)', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999 }}>
-                        {CATEGORIES.find(c => c.value === form.category)?.label || 'No category'}
-                      </span>
-                      <span style={{ background: 'rgba(34,211,238,0.1)', color: '#22D3EE', border: '1px solid rgba(34,211,238,0.2)', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999 }}>
-                        {form.workType}
-                      </span>
-                      <span style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999 }}>
-                        {form.experienceLevel}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 22, fontWeight: 800, background: 'linear-gradient(135deg, #6366F1, #22D3EE)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontFamily: 'Syne, Plus Jakarta Sans, sans-serif' }}>
-                      ₹{Number(form.budget || 0).toLocaleString()}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#64748B' }}>{form.budgetType}</div>
-                  </div>
-                </div>
-
-                <p style={{ fontSize: 13, color: '#94A3B8', lineHeight: 1.7, marginBottom: 14 }}>{form.description}</p>
-
-                {form.skills.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {form.skills.map(skill => (
-                      <span key={skill} style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', color: '#818CF8', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999 }}>{skill}</span>
+          <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+            <div style={card}>
+              <h2 style={{ fontSize:16, fontWeight:800, color:'#111827', marginBottom:20 }}>💰 Budget</h2>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:20 }}>
+                <div>
+                  <label style={label}>Budget Type</label>
+                  <div style={{ display:'flex', gap:8 }}>
+                    {[['fixed','💎 Fixed Price'],['hourly','⏱ Hourly Rate']].map(([v,l])=>(
+                      <button key={v} type="button" onClick={()=>set('budgetType',v)} style={{ flex:1, padding:'11px 8px', borderRadius:12, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:600, transition:'all 0.2s', background:form.budgetType===v?'#f5f3ff':'#f8fafc', border:`1.5px solid ${form.budgetType===v?'#4f46e5':'#e5e7eb'}`, color:form.budgetType===v?'#4f46e5':'#6b7280' }}>{l}</button>
                     ))}
                   </div>
-                )}
+                </div>
+                <div>
+                  <label style={label}>{form.budgetType==='fixed'?'Total Budget (₹) *':'Hourly Rate (₹/hr) *'}</label>
+                  <div style={{ position:'relative' }}>
+                    <span style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'#4f46e5', fontWeight:700, fontSize:16 }}>₹</span>
+                    <input type="number" style={{ ...input, paddingLeft:28 }} value={form.budget} onChange={e=>set('budget',e.target.value)} onFocus={fi} onBlur={bi} placeholder={form.budgetType==='fixed'?'50000':'1500'} min={0} />
+                  </div>
+                </div>
+              </div>
+
+              {form.budget > 0 && (
+                <div style={{ padding:18, background:'linear-gradient(135deg,rgba(79,70,229,0.06),rgba(34,211,238,0.04))', border:'1px solid #c7d2fe', borderRadius:12, display:'flex', gap:24, flexWrap:'wrap' }}>
+                  <div>
+                    <div style={{ fontSize:11, color:'#6b7280', marginBottom:2 }}>You post</div>
+                    <div style={{ fontSize:22, fontWeight:900, color:'#4f46e5', fontFamily:'Syne, sans-serif' }}>₹{Number(form.budget).toLocaleString()}</div>
+                  </div>
+                  <div style={{ width:1, background:'#e5e7eb' }} />
+                  <div>
+                    <div style={{ fontSize:11, color:'#6b7280', marginBottom:2 }}>Platform fee (10%)</div>
+                    <div style={{ fontSize:22, fontWeight:900, color:'#dc2626', fontFamily:'Syne, sans-serif' }}>₹{Math.round(Number(form.budget)*0.10).toLocaleString()}</div>
+                  </div>
+                  <div style={{ width:1, background:'#e5e7eb' }} />
+                  <div>
+                    <div style={{ fontSize:11, color:'#6b7280', marginBottom:2 }}>Freelancer receives</div>
+                    <div style={{ fontSize:22, fontWeight:900, color:'#16a34a', fontFamily:'Syne, sans-serif' }}>₹{Math.round(Number(form.budget)*0.90).toLocaleString()}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Review summary */}
+            <div style={card}>
+              <h2 style={{ fontSize:16, fontWeight:800, color:'#111827', marginBottom:16 }}>👁 Review Your Posting</h2>
+              <div style={{ background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:14, padding:20, marginBottom:16 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12, flexWrap:'wrap', gap:10 }}>
+                  <h3 style={{ fontSize:17, fontWeight:800, color:'#111827', fontFamily:'Syne, sans-serif' }}>{form.title||'Untitled Job'}</h3>
+                  <span style={{ fontSize:20, fontWeight:900, color:'#4f46e5', fontFamily:'Syne, sans-serif' }}>{form.budget?`₹${Number(form.budget).toLocaleString()}`:'-'}</span>
+                </div>
+                <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
+                  {form.category && <span style={{ fontSize:12, fontWeight:600, padding:'3px 10px', borderRadius:999, background:'#dbeafe', color:'#1d4ed8' }}>{CATEGORIES.find(c=>c.value===form.category)?.label}</span>}
+                  {form.workType && <span style={{ fontSize:12, fontWeight:600, padding:'3px 10px', borderRadius:999, background:'#f0fdf4', color:'#15803d', textTransform:'capitalize' }}>{form.workType}</span>}
+                  {form.experienceLevel && <span style={{ fontSize:12, fontWeight:600, padding:'3px 10px', borderRadius:999, background:'#fef3c7', color:'#92400e', textTransform:'capitalize' }}>{form.experienceLevel}</span>}
+                </div>
+                <p style={{ fontSize:13, color:'#6b7280', lineHeight:1.7, marginBottom:12 }}>{form.description||'No description added.'}</p>
+                {form.skills.length>0 && <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>{form.skills.map(s=><span key={s} style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:999, background:'#ede9fe', color:'#7c3aed', border:'1px solid #ddd6fe' }}>{s}</span>)}</div>}
               </div>
 
               {/* Checklist */}
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#64748B', marginBottom: 12 }}>Posting Checklist</div>
+              <h3 style={{ fontSize:13, fontWeight:700, color:'#374151', marginBottom:10 }}>Checklist</h3>
               {[
-                { label: 'Title added', done: !!form.title },
-                { label: 'Category selected', done: !!form.category },
-                { label: 'Description (50+ chars)', done: form.description.length >= 50 },
-                { label: 'Skills added', done: form.skills.length > 0 },
-                { label: 'Budget set', done: !!form.budget },
-                { label: 'Deadline set', done: !!form.deadline },
-              ].map((item, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                  <div style={{
-                    width: 20, height: 20, borderRadius: '50%',
-                    background: item.done ? 'linear-gradient(135deg, #6366F1, #22D3EE)' : 'rgba(255,255,255,0.07)',
-                    border: item.done ? 'none' : '1px solid rgba(255,255,255,0.15)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, color: '#fff', flexShrink: 0,
-                  }}>{item.done ? '✓' : ''}</div>
-                  <span style={{ fontSize: 13, color: item.done ? '#94A3B8' : '#64748B', textDecoration: item.done ? 'none' : 'none' }}>{item.label}</span>
-                  {!item.done && <span style={{ fontSize: 11, color: '#F59E0B' }}>⚠ Incomplete</span>}
+                { label:'Title added',         done:!!form.title },
+                { label:'Category selected',   done:!!form.category },
+                { label:'Description (40+ chars)', done:form.description.length>=40 },
+                { label:'Skills added',        done:form.skills.length>0 },
+                { label:'Budget set',          done:!!form.budget },
+                { label:'Deadline set',        done:!!form.deadline },
+              ].map((item,i)=>(
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+                  <div style={{ width:20, height:20, borderRadius:'50%', background:item.done?'#4f46e5':'#f1f5f9', border:item.done?'none':'1.5px solid #d1d5db', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    {item.done && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                  </div>
+                  <span style={{ fontSize:13, color:item.done?'#374151':'#9ca3af' }}>{item.label}</span>
+                  {!item.done && <span style={{ fontSize:11, color:'#f59e0b', marginLeft:'auto' }}>⚠ Required</span>}
                 </div>
               ))}
-            </div>
 
-            {/* Notification info */}
-            <div style={{
-              padding: 20,
-              background: 'linear-gradient(135deg, rgba(34,211,238,0.08), rgba(99,102,241,0.06))',
-              border: '1px solid rgba(34,211,238,0.2)', borderRadius: 16,
-              display: 'flex', gap: 14, alignItems: 'flex-start',
-            }}>
-              <div style={{ fontSize: 28, flexShrink: 0 }}>🔔</div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#F1F5F9', marginBottom: 4 }}>Notifications will be sent automatically</div>
-                <div style={{ fontSize: 13, color: '#64748B', lineHeight: 1.7 }}>
-                  All freelancers matching your skill requirements will receive an instant in-app notification and email alert about this new gig.
-                  {form.allowBids && ' Bidding will be open until your specified bid deadline.'}
+              {/* Notify info */}
+              <div style={{ marginTop:16, padding:16, background:'#ede9fe', border:'1px solid #ddd6fe', borderRadius:12, display:'flex', gap:12, alignItems:'flex-start' }}>
+                <div style={{ fontSize:22 }}>🔔</div>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700, color:'#4f46e5', marginBottom:3 }}>Instant notifications will be sent</div>
+                  <div style={{ fontSize:12, color:'#6b7280', lineHeight:1.6 }}>All freelancers matching your skill requirements will receive an in-app notification and email about this job.{form.allowBids&&' Bidding will be open until your bid deadline.'}</div>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Navigation Buttons ── */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 }}>
-          <button
-            onClick={prevStep}
-            disabled={step === 0}
-            style={{
-              padding: '12px 24px', borderRadius: 12, cursor: step === 0 ? 'not-allowed' : 'pointer',
-              fontFamily: 'Plus Jakarta Sans, sans-serif', fontSize: 14, fontWeight: 600,
-              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-              color: step === 0 ? '#2d3748' : '#94A3B8', transition: 'all 0.2s',
-            }}
-          >← Previous</button>
+        {/* ── NAV BUTTONS ── */}
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:20 }}>
+          <button onClick={prev} disabled={step===1} style={{ padding:'12px 26px', borderRadius:12, background:'#fff', border:'1px solid #e5e7eb', color:step===1?'#d1d5db':'#374151', fontSize:14, fontWeight:600, cursor:step===1?'not-allowed':'pointer', fontFamily:'inherit', transition:'all 0.2s' }}>
+            ← Previous
+          </button>
 
-          <div style={{ display: 'flex', gap: 6 }}>
-            {STEPS.map((_, i) => (
-              <div key={i} style={{
-                width: i === step ? 24 : 8, height: 8, borderRadius: 999,
-                background: i === step ? 'linear-gradient(90deg, #6366F1, #22D3EE)' : i < step ? '#4ade80' : 'rgba(255,255,255,0.1)',
-                transition: 'all 0.3s',
-              }} />
+          {/* Step dots */}
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            {STEPS.map(s=>(
+              <div key={s.id} style={{ width:step===s.id?28:8, height:8, borderRadius:999, background:step===s.id?'#4f46e5':step>s.id?'#22c55e':'#e5e7eb', transition:'all 0.3s' }} />
             ))}
           </div>
 
           {step < 3 ? (
-            <button
-              onClick={nextStep}
-              style={{
-                padding: '12px 28px', borderRadius: 12, cursor: 'pointer',
-                fontFamily: 'Plus Jakarta Sans, sans-serif', fontSize: 14, fontWeight: 700,
-                background: 'linear-gradient(135deg, #6366F1, #22D3EE)',
-                border: 'none', color: '#fff',
-                boxShadow: '0 4px 16px rgba(99,102,241,0.4)', transition: 'all 0.2s',
-              }}
-              onMouseEnter={e => { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 8px 24px rgba(99,102,241,0.5)'; }}
-              onMouseLeave={e => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 4px 16px rgba(99,102,241,0.4)'; }}
-            >Continue →</button>
+            <button onClick={next} style={{ padding:'12px 28px', borderRadius:12, background:'linear-gradient(135deg,#4f46e5,#6366F1)', border:'none', color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:'inherit', boxShadow:'0 4px 14px rgba(79,70,229,0.35)', transition:'all 0.2s' }}
+              onMouseEnter={e=>{ e.target.style.transform='translateY(-1px)'; e.target.style.boxShadow='0 6px 20px rgba(79,70,229,0.5)'; }}
+              onMouseLeave={e=>{ e.target.style.transform='translateY(0)'; e.target.style.boxShadow='0 4px 14px rgba(79,70,229,0.35)'; }}>
+              Continue →
+            </button>
           ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              style={{
-                padding: '12px 28px', borderRadius: 12, cursor: loading ? 'not-allowed' : 'pointer',
-                fontFamily: 'Plus Jakarta Sans, sans-serif', fontSize: 14, fontWeight: 700,
-                background: loading ? 'rgba(99,102,241,0.4)' : 'linear-gradient(135deg, #6366F1, #22D3EE)',
-                border: 'none', color: '#fff',
-                boxShadow: '0 4px 16px rgba(99,102,241,0.4)', transition: 'all 0.2s',
-                display: 'flex', alignItems: 'center', gap: 8,
-              }}
-            >
-              {loading ? (
-                <>
-                  <span style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-                  Posting...
-                </>
-              ) : '🚀 Post Gig & Notify Freelancers'}
+            <button onClick={handleSubmit} disabled={saving} style={{ padding:'12px 28px', borderRadius:12, background:saving?'rgba(79,70,229,0.5)':'linear-gradient(135deg,#4f46e5,#22D3EE)', border:'none', color:'#fff', fontSize:14, fontWeight:700, cursor:saving?'not-allowed':'pointer', fontFamily:'inherit', boxShadow:'0 4px 14px rgba(79,70,229,0.35)', display:'flex', alignItems:'center', gap:8 }}>
+              {saving ? (
+                <><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,0.4)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} /> Posting…</>
+              ) : '🚀 Post Job & Notify Freelancers'}
             </button>
           )}
         </div>
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        @keyframes spin{to{transform:rotate(360deg)}}
+        input[type=date]::-webkit-calendar-picker-indicator{cursor:pointer;opacity:0.6}
+        textarea::placeholder,input::placeholder{color:#9ca3af}
+      `}</style>
     </div>
   );
 };

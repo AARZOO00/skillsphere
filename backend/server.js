@@ -8,6 +8,13 @@ const rateLimit = require('express-rate-limit');
 const passport = require('passport');
 require('dotenv').config();
 require('./config/passport');
+const { setupVideoSignaling } = require('./socket/videoSignaling');
+const session = require('express-session');
+
+
+// After creating io:
+
+
 
 const app = express();
 const server = http.createServer(app);
@@ -19,6 +26,11 @@ const io = new Server(server, {
     credentials: true
   }
 });
+// Attach video signaling
+setupVideoSignaling(io);
+
+// Make io available to routes (for notifications)
+app.set('io', io);
 
 app.set('io', io);
 
@@ -29,7 +41,11 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 200, message: { success: false, message: 'Too many requests' } }));
+app.use(session({ secret: process.env.SESSION_SECRET || 'ss_secret', resave: false, saveUninitialized: false }));
+app.use(passport.session());
 
+app.use('/api/auth/github', require('./routes/github.auth'));
+app.use('/api/auth/google', require('./routes/google.auth'));
 // Routes
 app.use('/api/auth',          require('./routes/auth.routes'));
 app.use('/api/users',         require('./routes/user.routes'));
@@ -43,8 +59,21 @@ app.use('/api/notifications', require('./routes/notification.routes'));
 app.use('/api/disputes',      require('./routes/dispute.routes'));
 app.use('/api/ai',            require('./routes/ai.routes'));
 
+// Subscription routes
+app.use('/api/subscription',  require('./routes/subscription.routes').router);
+
+// Referral routes
+app.use('/api/referral',      require('./routes/referral.routes').router);
+
+// Smart Search routes
+app.use('/api/search',        require('./routes/search.routes'));
+
+// Notification routes
 app.use('/api/notifications', require('./routes/notification.routes'));
 
+// Video signaling — add AFTER creating `io`
+
+app.set('io', io);
 app.get('/', (req, res) => res.json({ success: true, message: 'SkillSphere API v1.0' }));
 
 // Global error handler

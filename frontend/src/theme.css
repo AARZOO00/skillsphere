@@ -1,0 +1,49 @@
+/* SkillSphere — Blue + Gold Premium Theme */
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --blue-primary:  #1A56DB;
+  --blue-mid:      #1E40AF;
+  --blue-light:    #60A5FA;
+  --blue-pale:     rgba(26,86,219,0.14);
+  --blue-border:   rgba(96,165,250,0.28);
+  --gold-primary:  #D4AF37;
+  --gold-bright:   #F59E0B;
+  --gold-light:    #FBBF24;
+  --gold-pale:     rgba(212,175,55,0.12);
+  --gold-border:   rgba(212,175,55,0.28);
+  --bg-base:       #020918;
+  --bg-deep:       #061230;
+  --bg-card:       rgba(255,255,255,0.035);
+  --bg-input:      rgba(255,255,255,0.055);
+  --text-primary:  #F1F5F9;
+  --text-muted:    rgba(255,255,255,0.38);
+  --border-def:    rgba(255,255,255,0.08);
+  --grad-blue:     linear-gradient(135deg,#1A56DB,#1E40AF);
+  --grad-gold:     linear-gradient(135deg,#D4AF37,#F59E0B);
+  --grad-bg:       linear-gradient(160deg,#020918 0%,#061230 45%,#0a1628 100%);
+  --font-display:  'Syne', sans-serif;
+  --font-body:     'Plus Jakarta Sans', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body { background: var(--bg-base); color: var(--text-primary); font-family: var(--font-body); margin: 0; }
+input::placeholder { color: rgba(255,255,255,0.25); }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-thumb { background: rgba(96,165,250,0.3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(212,175,55,0.45); }
+
+@keyframes ss-spin    { to { transform:rotate(360deg) } }
+@keyframes ss-fadeUp  { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+@keyframes ss-blink   { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes ss-blob1   { 0%,100%{transform:translate(0,0)} 50%{transform:translate(22px,-16px)} }
+@keyframes ss-blob2   { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-16px,22px)} }
+@keyframes ss-blob3   { 0%,100%{transform:translate(0,0)} 33%{transform:translate(14px,-10px)} 66%{transform:translate(-10px,14px)} }
+@keyframes ss-dropIn  { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes ss-slideUp { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
+@keyframes ss-twinkle { 0%,100%{opacity:0.12;transform:scale(1)} 50%{opacity:0.8;transform:scale(1.5)} }
+@keyframes ss-pulse   { 0%,100%{transform:scale(1)} 50%{transform:scale(1.18)} }
+@keyframes ss-shimmer { 0%,100%{opacity:0.5} 50%{opacity:0.2} }
+@keyframes ss-pop     { from{opacity:0;transform:scale(.55)} to{opacity:1;transform:scale(1)} }
+@keyframes ss-progress{ from{width:0%} to{width:100%} }
+@keyframes ss-bounce  { 0%,100%{transform:translateY(0);opacity:.3} 50%{transform:translateY(-7px);opacity:1} }

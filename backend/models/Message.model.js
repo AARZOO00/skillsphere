@@ -17,6 +17,6 @@ const conversationSchema = new mongoose.Schema({
   isActive:     { type: Boolean, default: true }
 }, { timestamps: true });
 
-const Message = mongoose.model('Message', messageSchema);
-const Conversation = mongoose.model('Conversation', conversationSchema);
+const Message = mongoose.models.Message || mongoose.model('Message', messageSchema);
+const Conversation = mongoose.models.Conversation || mongoose.model('Conversation', conversationSchema);
 module.exports = { Message, Conversation };

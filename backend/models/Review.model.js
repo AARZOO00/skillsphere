@@ -19,4 +19,4 @@ const reviewSchema = new mongoose.Schema({
   helpfulVotes: { type: Number, default: 0 }
 }, { timestamps: true });
 
-module.exports = mongoose.model('Review', reviewSchema);
+module.exports = mongoose.models.Review || mongoose.model('Review', reviewSchema);

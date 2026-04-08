@@ -17,4 +17,4 @@ const proposalSchema = new mongoose.Schema({
   isShortlisted: { type: Boolean, default: false }
 }, { timestamps: true });
 
-module.exports = mongoose.model('Proposal', proposalSchema);
+module.exports = mongoose.models.Proposal || mongoose.model('Proposal', proposalSchema);

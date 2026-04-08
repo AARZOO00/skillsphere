@@ -7,6 +7,8 @@ import api from '../utils/api';
 
 const SKILLS = ['All', 'React.js', 'Node.js', 'Python', 'UI/UX Design', 'Flutter', 'MongoDB', 'AWS', 'Figma', 'TypeScript', 'DevOps'];
 
+const getLoc = (l) => !l ? 'Remote' : typeof l === 'string' ? l : l.city || l.state || l.country || 'India';
+
 const FindTalent = () => {
   const [freelancers, setFreelancers] = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -182,7 +184,7 @@ const FindTalent = () => {
                     <div style={{ fontSize: 13, color: '#6b7280' }}>
                       <span style={{ fontWeight: 600, color: '#374151' }}>{f.completedProjects || 0}</span> projects
                     </div>
-                    <div style={{ fontSize: 13, color: '#6b7280' }}>📍 {f.location || 'Remote'}</div>
+                    <div style={{ fontSize: 13, color: '#6b7280' }}>📍 {getLoc(f.location)}</div>
                   </div>
 
                   {/* Skills */}

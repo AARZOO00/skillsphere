@@ -34,4 +34,4 @@ const freelancerSchema = new mongoose.Schema({
   languages: [{ name: String, proficiency: String }]
 }, { timestamps: true });
 
-module.exports = mongoose.model('Freelancer', freelancerSchema);
+module.exports = mongoose.models.Freelancer || mongoose.model('Freelancer', freelancerSchema);

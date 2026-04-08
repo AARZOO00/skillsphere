@@ -37,4 +37,4 @@ const bidSchema = new mongoose.Schema({
 // Ek freelancer ek gig pe sirf ek bid kar sakta hai
 bidSchema.index({ gig: 1, freelancer: 1 }, { unique: true });
 
-module.exports = mongoose.model('Bid', bidSchema);
+module.exports = mongoose.models.Bid || mongoose.model('Bid', bidSchema);
