@@ -2,9 +2,9 @@
 // Fixed: replaced  import { create } from '../models/Notification.model.js'
 //        with      const Notification = require('../models/Notification.model');
 
-const Gig          = require('../models/Gig.model');
+const Gig          = require('../models/gig.model');
 const Bid          = require('../models/bid.model');
-const User         = require('../models/User.model');
+const User         = require('../models/user.model');
 const Notification = require('../models/Notification.model');  // ← FIXED
 
 // ─── Helper: send in-app notification ───────────────────────────
