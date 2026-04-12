@@ -2,7 +2,7 @@
 // Fixed: replaced  import { create } from '../models/Notification.model.js'
 //        with      const Notification = require('../models/Notification.model');
 
-const Gig          = require('../models/gig.model');
+const Gig          = require('../models/Gig.model');
 const Bid          = require('../models/bid.model');
 const User         = require('../models/User.model');
 const Notification = require('../models/Notification.model');  // ← FIXED

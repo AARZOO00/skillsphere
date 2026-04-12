@@ -58,7 +58,9 @@ const ProtectedRoute = ({ children, roles }) => {
     </div>
   );
 
-  if (!user) return <Navigate to="/login" replace />;
+  // Check both Redux user and localStorage token
+  const token = localStorage.getItem('token');
+  if (!user && !token) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(user.role)) return <Navigate to="/dashboard" replace />;
   return children;
 };

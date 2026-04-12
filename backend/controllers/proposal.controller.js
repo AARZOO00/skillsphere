@@ -1,5 +1,5 @@
 const Proposal = require('../models/Proposal.model');
-const Gig = require('../models/gig.model');
+const Gig = require('../models/GSig.model');
 const Notification = require('../models/Notification.model');
 
 exports.submitProposal = async (req, res) => {
