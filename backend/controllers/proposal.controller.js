@@ -1,5 +1,5 @@
 const Proposal = require('../models/Proposal.model');
-const Gig = require('../models/GSig.model');
+const Gig = require('../models/Gig.model');          // ← GSig → Gig
 const Notification = require('../models/Notification.model');
 
 exports.submitProposal = async (req, res) => {
@@ -58,9 +58,9 @@ exports.updateStatus = async (req, res) => {
       await Proposal.updateMany({ gig: proposal.gig._id, _id: { $ne: proposal._id }, status: 'pending' }, { status: 'rejected' });
     }
 
-    const notifType = status === 'accepted' ? 'proposal_accepted' : 'proposal_rejected';
+    const notifType  = status === 'accepted' ? 'proposal_accepted' : 'proposal_rejected';
     const notifTitle = status === 'accepted' ? 'Proposal Accepted!' : 'Proposal Update';
-    const notifMsg = status === 'accepted' ? 'Your proposal was accepted for "' + proposal.gig.title + '"' : 'Your proposal was not selected for "' + proposal.gig.title + '"';
+    const notifMsg   = status === 'accepted' ? 'Your proposal was accepted for "' + proposal.gig.title + '"' : 'Your proposal was not selected for "' + proposal.gig.title + '"';
     await Notification.create({ user: proposal.freelancer, type: notifType, title: notifTitle, message: notifMsg });
     req.app.get('io').to('user_' + proposal.freelancer).emit('notification', { type: notifType });
 
