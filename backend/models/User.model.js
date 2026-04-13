@@ -1,55 +1,88 @@
+// backend/models/user.model.js
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const bcrypt   = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
   name:     { type: String, required: true, trim: true },
-  email:    { type: String, required: true, unique: true, lowercase: true },
-  password: { type: String, minlength: 6, select: false },
-  role:     { type: String, enum: ['client','freelancer','admin'], default: 'client' },
-  avatar:   { type: String, default: '' },
-  phone:    { type: String, default: '' },
+  email:    { type: String, unique: true, sparse: true, lowercase: true, trim: true },
+  password: { type: String, select: false },
+
+  // OAuth
+  googleId:     { type: String, unique: true, sparse: true },
+  githubId:     { type: String, unique: true, sparse: true },
+  authProvider: { type: String, enum: ['local','google','github'], default: 'local' },
+
+  role:   { type: String, enum: ['client','freelancer','admin'], default: 'freelancer' },
+  avatar: { type: String, default: '' },
+  bio:    { type: String, default: '', maxlength: 1000 },
+  title:  { type: String, default: '' },
+
+  skills:     [{ type: String }],
+  hourlyRate: { type: Number, default: 0 },
   location: {
-    city: { type: String, default: '' },
-    state: { type: String, default: '' },
-    country: { type: String, default: '' },
-    coordinates: {
-      type: { type: String, enum: ['Point'], default: 'Point' },
-      coordinates: { type: [Number], default: [0, 0] }
-    }
+    city:        String,
+    state:       String,
+    country:     { type: String, default: 'India' },
+    coordinates: { type: [Number], index: '2dsphere' },
   },
-  isEmailVerified:       { type: Boolean, default: false },
-  emailVerificationToken: String,
-  emailVerificationExpire: Date,
-  passwordResetToken:    String,
-  passwordResetExpire:   Date,
-  twoFactorEnabled:      { type: Boolean, default: false },
-  twoFactorSecret:       { type: String, select: false },
-  googleId:              String,
-  isActive:              { type: Boolean, default: true },
-  isSuspended:           { type: Boolean, default: false },
-  suspendReason:         String,
-  lastSeen:              { type: Date, default: Date.now }
+
+  // Stats
+  rating:            { type: Number, default: 0, min: 0, max: 5 },
+  reviewCount:       { type: Number, default: 0 },
+  completedProjects: { type: Number, default: 0 },
+  responseTime:      { type: String, default: '< 1 hour' },
+
+  // Auth
+  isVerified:      { type: Boolean, default: false },
+  isOnline:        { type: Boolean, default: false },
+  isFeatured:      { type: Boolean, default: false },
+  isPro:           { type: Boolean, default: false },
+  status:          { type: String, enum: ['active','suspended','pending'], default: 'active' },
+
+  // Verification tokens
+  emailVerifyToken:  String,
+  emailVerifyExpiry: Date,
+  resetPasswordToken:  String,
+  resetPasswordExpiry: Date,
+
+  // Subscription
+  subscriptionPlan:   { type: String, enum: ['free','pro','elite'], default: 'free' },
+  subscriptionStatus: { type: String, default: 'inactive' },
+
+  // Referral & Rewards
+  referralCode: { type: String, unique: true, sparse: true },
+  credits:      { type: Number, default: 0 },
+
+  // 2FA
+  twoFactorEnabled: { type: Boolean, default: false },
+  twoFactorSecret:  { type: String, select: false },
+
+  lastSeen: { type: Date, default: Date.now },
 }, { timestamps: true });
 
-userSchema.index({ 'location.coordinates': '2dsphere' });
-
-userSchema.pre('save', async function(next) {
+// ── Password hashing ──────────────────────────────────────────
+userSchema.pre('save', async function (next) {
   if (!this.isModified('password') || !this.password) return next();
-  const salt = await bcrypt.genSalt(12);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
+  try {
+    const salt   = await bcrypt.genSalt(12);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (err) { next(err); }
 });
 
-userSchema.methods.matchPassword = async function(entered) {
-  return await bcrypt.compare(entered, this.password);
+// ── Compare password ──────────────────────────────────────────
+userSchema.methods.comparePassword = async function (plain) {
+  if (!this.password) return false;
+  return bcrypt.compare(plain, this.password);
 };
 
-userSchema.methods.toJSON = function() {
+// ── Safe user object (no password) ───────────────────────────
+userSchema.methods.toSafeObject = function () {
   const obj = this.toObject();
   delete obj.password;
   delete obj.twoFactorSecret;
-  delete obj.emailVerificationToken;
-  delete obj.passwordResetToken;
+  delete obj.emailVerifyToken;
+  delete obj.resetPasswordToken;
   return obj;
 };
 

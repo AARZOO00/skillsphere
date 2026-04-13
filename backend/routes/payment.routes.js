@@ -9,7 +9,7 @@ const { protect } = require('../middleware/auth.middleware');
 // Try to import Payment model — create a simple one if it doesn't exist
 let Payment;
 try {
-  Payment = require('../models/payment.model');
+  Payment = require('../models/index').Payment;
 } catch {
   // If model doesn't exist, create inline schema
   const mongoose = require('mongoose');

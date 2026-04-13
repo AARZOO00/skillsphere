@@ -174,7 +174,7 @@ router.post('/activate', protect, async (req, res) => {
     });
 
     // Update user model with plan info
-    const User = require('../models/User.model');
+    const User = require('../models/index').User;
     await User.findByIdAndUpdate(req.user._id, {
       subscriptionPlan:   planId,
       subscriptionStatus: 'active',
@@ -204,7 +204,7 @@ router.post('/cancel', protect, async (req, res) => {
     );
     if (!sub) return res.status(404).json({ message: 'No active subscription found' });
 
-    const User = require('../models/User.model');
+    const User = require('../models/index').User;
     await User.findByIdAndUpdate(req.user._id, {
       subscriptionPlan:   'free',
       subscriptionStatus: 'cancelled',

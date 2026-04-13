@@ -42,7 +42,7 @@ router.get('/', async (req, res) => {
 
     // ── Search GIGS ────────────────────────────────────────────
     if (type === 'all' || type === 'gigs') {
-      const Gig = require('../models/gig.model');
+      const Gig = require('../models/index').Gig;
       const gigFilter = {
         status: { $in: ['open','active'] },
         visibility: 'public',
@@ -81,7 +81,7 @@ router.get('/', async (req, res) => {
       ]);
 
       // Attach bid counts
-      const Bid = require('../models/bid.model');
+      const Bid = require('../models/index').Bid;
       const withBids = await Promise.all(gigs.map(async g => {
         try {
           const bc = await Bid.countDocuments({ gig: g._id });
@@ -95,7 +95,7 @@ router.get('/', async (req, res) => {
 
     // ── Search FREELANCERS ─────────────────────────────────────
     if (type === 'all' || type === 'freelancers') {
-      const User = require('../models/User.model');
+      const User = require('../models/index').User;
       const userFilter = { role: 'freelancer', status: 'active' };
 
       if (q.trim()) {
@@ -160,7 +160,7 @@ router.get('/autocomplete', async (req, res) => {
     // 2. Job title suggestions from DB
     let titleSuggestions = [];
     try {
-      const Gig = require('../models/gig.model');
+      const Gig = require('../models/index').Gig;
       const titleRe = new RegExp(escapeRegex(q), 'i');
       const gigs = await Gig.find({ title: titleRe, status: 'open' })
         .select('title category')
@@ -172,7 +172,7 @@ router.get('/autocomplete', async (req, res) => {
     // 3. Freelancer name suggestions
     let peopleSuggestions = [];
     try {
-      const User = require('../models/User.model');
+      const User = require('../models/index').User;
       const nameRe = new RegExp(escapeRegex(q), 'i');
       const people = await User.find({ role: 'freelancer', name: nameRe, status: 'active' })
         .select('name title avatar')
@@ -201,7 +201,7 @@ router.get('/trending', async (req, res) => {
     // Top skills from recent gigs
     let trendingSkills = [];
     try {
-      const Gig = require('../models/gig.model');
+      const Gig = require('../models/index').Gig;
       const result = await Gig.aggregate([
         { $match: { status: 'open', createdAt: { $gte: new Date(Date.now() - 30*86400000) } } },
         { $unwind: '$skills' },
@@ -252,7 +252,7 @@ router.get('/skill-suggestions', async (req, res) => {
     // Skill co-occurrence from DB
     let related = [];
     try {
-      const Gig = require('../models/gig.model');
+      const Gig = require('../models/index').Gig;
       const currentRe = current.map(s => new RegExp(s, 'i'));
       const gigs = await Gig.find({ skills: { $in: currentRe }, status: 'open' }).select('skills').limit(200).lean();
       const freq = {};
@@ -294,7 +294,7 @@ const getPopularSearches = () => [
 // ── Create MongoDB text indexes (run once) ────────────────────
 const createIndexes = async () => {
   try {
-    const Gig  = require('../models/gig.model');
+    const Gig  = require('../models/index').Gig;
     await Gig.collection.createIndex({ title:'text', description:'text', skills:'text' }, { weights:{ title:10, skills:5, description:1 } });
     console.log('[Search] Text indexes created on Gig collection');
   } catch(err) {

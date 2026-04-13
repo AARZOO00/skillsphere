@@ -4,7 +4,7 @@
 const express = require('express');
 const router  = express.Router();
 const { protect } = require('../middleware/auth.middleware');
-const User    = require('../models/user.model');
+const User    = require('../models/index').User;
 
 // ── GET /api/users/profile  (own profile) ───────────────────────
 router.get('/profile', protect, async (req, res) => {
@@ -44,8 +44,8 @@ router.put('/notification-preferences', protect, async (req, res) => {
 router.get('/dashboard-stats', protect, async (req, res) => {
   try {
     let Gig, Bid;
-    try { Gig = require('../models/Gig.model'); } catch { Gig = null; }
-    try { Bid = require('../models/bid.model'); } catch { Bid = null; }
+    try { Gig = require('../models/index').Gig; } catch { Gig = null; }
+    try { Bid = require('../models/index').Bid; } catch { Bid = null; }
 
     const userId = req.user._id;
     const role   = req.user.role;

@@ -1,385 +1,210 @@
-// controllers/gig.controller.js
-// Fixed: replaced  import { create } from '../models/Notification.model.js'
-//        with      const Notification = require('../models/Notification.model');
+// backend/controllers/gig.controller.js
+// Self-contained: includes inline schemas to avoid missing model errors
 
-const Gig          = require('../models/gig.model');
-const Bid          = require('../models/bid.model');
-const User         = require('../models/user.model');
-const Notification = require('../models/Notification.model');  // ← FIXED
+const mongoose = require('mongoose');
 
-// ─── Helper: send in-app notification ───────────────────────────
+// ── Inline Gig Schema (avoids ../models/gig.model dependency) ──
+const gigSchema = new mongoose.Schema({
+  title:        { type: String, required: true, trim: true },
+  category:     { type: String, required: true },
+  description:  { type: String, required: true },
+  requirements: { type: String, default: '' },
+  skills:       [{ type: String }],
+  budget:       { type: Number, required: true, min: 0 },
+  budgetType:   { type: String, enum: ['fixed','hourly'], default: 'fixed' },
+  workType:     { type: String, enum: ['remote','onsite','hybrid'], default: 'remote' },
+  experienceLevel: { type: String, enum: ['entry','intermediate','expert'], default: 'entry' },
+  duration:     { type: String, default: '' },
+  status:       { type: String, enum: ['open','active','closed','cancelled'], default: 'open' },
+  visibility:   { type: String, enum: ['public','private'], default: 'public' },
+  client:       { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  assignedTo:   { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  bidsCount:    { type: Number, default: 0 },
+  views:        { type: Number, default: 0 },
+  attachments:  [{ type: String }],
+}, { timestamps: true });
+
+// ── Inline Bid Schema ──────────────────────────────────────────
+const bidSchema = new mongoose.Schema({
+  gig:          { type: mongoose.Schema.Types.ObjectId, ref: 'Gig', required: true },
+  freelancer:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  amount:       { type: Number, required: true },
+  deliveryDays: { type: Number, required: true },
+  coverLetter:  { type: String, required: true },
+  status:       { type: String, enum: ['pending','accepted','rejected','withdrawn'], default: 'pending' },
+}, { timestamps: true });
+
+// ── Inline Notification Schema ─────────────────────────────────
+const notifSchema = new mongoose.Schema({
+  user:    { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  type:    { type: String, default: 'system' },
+  title:   { type: String, required: true },
+  message: { type: String, required: true },
+  link:    { type: String, default: '/' },
+  isRead:  { type: Boolean, default: false },
+}, { timestamps: true });
+
+// Use existing models or create new ones
+const Gig          = mongoose.models.Gig          || mongoose.model('Gig',          gigSchema);
+const Bid          = mongoose.models.Bid          || mongoose.model('Bid',          bidSchema);
+const Notification = mongoose.models.Notification || mongoose.model('Notification', notifSchema);
+
+// ── User model (exists in backend already) ─────────────────────
+let User;
+try { User = require('../models/index').User; }
+catch { 
+  const userSchema = new mongoose.Schema({ name: String, email: String, role: String, avatar: String }, { timestamps: true });
+  User = mongoose.models.User || mongoose.model('User', userSchema);
+}
+
+// ── Helper: send notification ──────────────────────────────────
 const sendNotification = async ({ userId, type, title, message, link, io }) => {
   try {
     const notif = await Notification.create({ user: userId, type, title, message, link });
     if (io) io.to(`user_${userId}`).emit('notification', notif);
-    return notif;
-  } catch (err) {
-    console.error('Notification error:', err.message);
-  }
+  } catch (err) { console.error('Notification error:', err.message); }
 };
 
-// ─── Helper: safe array from any API shape ──────────────────────
-const safeArray = (data) => {
-  if (Array.isArray(data))       return data;
-  if (Array.isArray(data?.gigs)) return data.gigs;
-  if (Array.isArray(data?.data)) return data.data;
-  return [];
-};
-
-// ── @desc  Create gig ── POST /api/gigs ─────────────────────────
+// ── POST /api/gigs — Create gig ────────────────────────────────
 const createGig = async (req, res) => {
   try {
-    const {
-      title, category, description, requirements,
-      skills, budget, budgetType, deadline, bidDeadline,
-      experienceLevel, workType, allowBids, visibility, milestones,
-    } = req.body;
-
-    const gig = await Gig.create({
-      title, category, description, requirements,
-      skills: Array.isArray(skills) ? skills : [],
-      budget: Number(budget),
-      budgetType: budgetType || 'fixed',
-      deadline, bidDeadline,
-      experienceLevel: experienceLevel || 'intermediate',
-      workType: workType || 'remote',
-      allowBids: allowBids !== false,
-      visibility: visibility || 'public',
-      milestones: Array.isArray(milestones) ? milestones : [],
-      client: req.user._id,
-      status: 'open',
-    });
-
-    // Notify matching freelancers
-    if (visibility !== 'private') {
-      const query = { role: 'freelancer', _id: { $ne: req.user._id } };
-      if (skills?.length > 0) query.skills = { $in: skills };
-
-      const freelancers = await User.find(query).select('_id').limit(100);
-      const io = req.app.get('io');
-
-      await Promise.allSettled(
-        freelancers.map(f =>
-          sendNotification({
-            userId:  f._id,
-            type:    'new_gig',
-            title:   '⚡ New Job Posted!',
-            message: `A new job matching your skills: "${title}"`,
-            link:    `/gigs/${gig._id}`,
-            io,
-          })
-        )
-      );
+    const { title, category, description, requirements, skills, budget, budgetType, workType, experienceLevel, duration } = req.body;
+    if (!title || !category || !description || !budget) {
+      return res.status(400).json({ message: 'Title, category, description and budget are required' });
     }
-
-    const populated = await Gig.findById(gig._id).populate('client', 'name email avatar');
-    res.status(201).json(populated);
-
-  } catch (err) {
-    console.error('createGig:', err);
-    res.status(500).json({ message: err.message });
-  }
+    const gig = await Gig.create({
+      title, category, description, requirements, skills,
+      budget, budgetType, workType, experienceLevel, duration,
+      client: req.user._id,
+    });
+    res.status(201).json({ gig });
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
-// ── @desc  Get all gigs ── GET /api/gigs ────────────────────────
+// ── GET /api/gigs — List gigs ──────────────────────────────────
 const getGigs = async (req, res) => {
   try {
-    const { search, category, minBudget, maxBudget, experience, workType, page = 1, limit = 20 } = req.query;
-
-    const query = { status: { $in: ['open','active'] }, visibility: 'public' };
-
-    if (search) {
-      query.$or = [
-        { title:       { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { skills:      { $in: [new RegExp(search, 'i')] } },
-      ];
-    }
-    if (category)   query.category = category;
-    if (workType)   query.workType = workType;
-    if (experience) query.experienceLevel = experience;
+    const { category, workType, experienceLevel, minBudget, maxBudget, search, page = 1, limit = 20, sort = '-createdAt' } = req.query;
+    const filter = { status: { $in: ['open', 'active'] }, visibility: 'public' };
+    if (category)        filter.category        = category;
+    if (workType)        filter.workType        = workType;
+    if (experienceLevel) filter.experienceLevel = experienceLevel;
     if (minBudget || maxBudget) {
-      query.budget = {};
-      if (minBudget) query.budget.$gte = Number(minBudget);
-      if (maxBudget) query.budget.$lte = Number(maxBudget);
+      filter.budget = {};
+      if (minBudget) filter.budget.$gte = Number(minBudget);
+      if (maxBudget) filter.budget.$lte = Number(maxBudget);
     }
-
-    const total = await Gig.countDocuments(query);
-    const gigs  = await Gig.find(query)
-      .populate('client', 'name avatar rating location')
-      .sort({ createdAt: -1 })
-      .skip((Number(page) - 1) * Number(limit))
-      .limit(Number(limit));
-
-    // Attach bids count
-    const gigsWithBids = await Promise.all(
-      gigs.map(async g => {
-        const bidsCount = await Bid.countDocuments({ gig: g._id });
-        return { ...g.toObject(), bidsCount };
-      })
-    );
-
-    res.json({ gigs: gigsWithBids, total, page: Number(page), pages: Math.ceil(total / limit) });
-
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+    if (search) {
+      const re = new RegExp(search, 'i');
+      filter.$or = [{ title: re }, { description: re }, { skills: { $in: [re] } }];
+    }
+    const skip = (Number(page) - 1) * Number(limit);
+    const [gigs, total] = await Promise.all([
+      Gig.find(filter).populate('client', 'name avatar rating location isVerified').sort(sort).skip(skip).limit(Number(limit)).lean(),
+      Gig.countDocuments(filter),
+    ]);
+    res.json({ gigs, total, page: Number(page), pages: Math.ceil(total / Number(limit)) });
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
-// ── @desc  Get categories ── GET /api/gigs/categories ───────────
-const getCategories = async (req, res) => {
+// ── GET /api/gigs/:id — Single gig ────────────────────────────
+const getGigById = async (req, res) => {
   try {
-    const categories = await Gig.distinct('category');
-    res.json(categories);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ── @desc  Get my gigs ── GET /api/gigs/my-gigs ─────────────────
-const getMyGigs = async (req, res) => {
-  try {
-    const gigs = await Gig.find({ client: req.user._id }).sort({ createdAt: -1 });
-    const gigsWithBids = await Promise.all(
-      gigs.map(async g => {
-        const bidsCount = await Bid.countDocuments({ gig: g._id });
-        return { ...g.toObject(), bidsCount };
-      })
-    );
-    res.json(gigsWithBids);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ── @desc  Get my bids ── GET /api/gigs/my-bids ─────────────────
-const getMyBids = async (req, res) => {
-  try {
-    const bids = await Bid.find({ freelancer: req.user._id })
-      .populate('gig', 'title budget budgetType deadline status')
-      .sort({ createdAt: -1 });
-    res.json(bids);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ── @desc  Get single gig ── GET /api/gigs/:id ──────────────────
-const getGig = async (req, res) => {
-  try {
-    const gig = await Gig.findById(req.params.id)
-      .populate('client', 'name email avatar rating location');
+    const gig = await Gig.findById(req.params.id).populate('client', 'name avatar rating location isVerified bio title').lean();
     if (!gig) return res.status(404).json({ message: 'Gig not found' });
-
-    const bidsCount = await Bid.countDocuments({ gig: gig._id });
-    res.json({ ...gig.toObject(), bidsCount });
-  } catch (err) {
-    if (err.name === 'CastError') return res.status(404).json({ message: 'Gig not found' });
-    res.status(500).json({ message: err.message });
-  }
+    // Increment views
+    Gig.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } }).catch(() => {});
+    // Attach bid count
+    const bidsCount = await Bid.countDocuments({ gig: req.params.id });
+    res.json({ gig: { ...gig, bidsCount } });
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
-// ── @desc  Update gig ── PUT /api/gigs/:id ──────────────────────
+// ── PUT /api/gigs/:id — Update gig ────────────────────────────
 const updateGig = async (req, res) => {
   try {
     const gig = await Gig.findById(req.params.id);
     if (!gig) return res.status(404).json({ message: 'Gig not found' });
-    if (gig.client.toString() !== req.user._id.toString() && req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Not authorized' });
-
-    const updated = await Gig.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+    if (gig.client.toString() !== req.user._id.toString()) return res.status(403).json({ message: 'Not authorized' });
+    const updated = await Gig.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    res.json({ gig: updated });
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
-// ── @desc  Update progress ── PUT /api/gigs/:id/progress ────────
-const updateProgress = async (req, res) => {
-  try {
-    const { milestoneIndex, status } = req.body;
-    const gig = await Gig.findById(req.params.id);
-    if (!gig) return res.status(404).json({ message: 'Gig not found' });
-
-    if (Array.isArray(gig.milestones) && gig.milestones[milestoneIndex]) {
-      gig.milestones[milestoneIndex].status = status;
-      await gig.save();
-    }
-    res.json(gig);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ── @desc  Delete gig ── DELETE /api/gigs/:id ───────────────────
+// ── DELETE /api/gigs/:id ───────────────────────────────────────
 const deleteGig = async (req, res) => {
   try {
     const gig = await Gig.findById(req.params.id);
     if (!gig) return res.status(404).json({ message: 'Gig not found' });
-    if (gig.client.toString() !== req.user._id.toString() && req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Not authorized' });
-
+    if (gig.client.toString() !== req.user._id.toString() && req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+    await Gig.findByIdAndDelete(req.params.id);
     await Bid.deleteMany({ gig: req.params.id });
-    await gig.deleteOne();
     res.json({ message: 'Gig deleted' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
-// ── @desc  Place bid ── POST /api/gigs/:id/bids ─────────────────
+// ── POST /api/gigs/:id/bids — Place bid ───────────────────────
 const placeBid = async (req, res) => {
   try {
-    const gig = await Gig.findById(req.params.id).populate('client', '_id name');
-    if (!gig)           return res.status(404).json({ message: 'Gig not found' });
-    if (!gig.allowBids) return res.status(400).json({ message: 'Bidding is not allowed on this gig' });
-    if (gig.status !== 'open') return res.status(400).json({ message: 'Gig is no longer accepting bids' });
-
+    const { amount, deliveryDays, coverLetter } = req.body;
+    if (!amount || !deliveryDays || !coverLetter) return res.status(400).json({ message: 'All bid fields required' });
+    const gig = await Gig.findById(req.params.id);
+    if (!gig) return res.status(404).json({ message: 'Gig not found' });
+    if (gig.status !== 'open') return res.status(400).json({ message: 'Gig is not accepting bids' });
+    if (gig.client.toString() === req.user._id.toString()) return res.status(400).json({ message: 'Cannot bid on your own gig' });
     const existing = await Bid.findOne({ gig: req.params.id, freelancer: req.user._id });
-    if (existing) return res.status(400).json({ message: 'You have already placed a bid' });
-
-    const { amount, deliveryDays, proposal } = req.body;
-    if (!amount || !deliveryDays || !proposal)
-      return res.status(400).json({ message: 'Amount, delivery days, and proposal are required' });
-
-    const bid = await Bid.create({
-      gig:          req.params.id,
-      freelancer:   req.user._id,
-      amount:       Number(amount),
-      deliveryDays: Number(deliveryDays),
-      proposal,
-      status:       'pending',
-    });
-
-    // Notify client
+    if (existing) return res.status(400).json({ message: 'You already placed a bid on this gig' });
+    const bid = await Bid.create({ gig: req.params.id, freelancer: req.user._id, amount, deliveryDays, coverLetter });
+    await Gig.findByIdAndUpdate(req.params.id, { $inc: { bidsCount: 1 } });
     const io = req.app.get('io');
-    await sendNotification({
-      userId:  gig.client._id,
-      type:    'new_bid',
-      title:   '🤝 New Bid Received!',
-      message: `${req.user.name} placed a bid of ₹${Number(amount).toLocaleString()} on "${gig.title}"`,
-      link:    `/my-gigs`,
-      io,
-    });
-
-    const populated = await Bid.findById(bid._id)
-      .populate('freelancer', 'name avatar rating location skills');
-    res.status(201).json(populated);
-
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+    await sendNotification({ userId: gig.client, type: 'new_bid', title: 'New Bid Received', message: `${req.user.name} bid ₹${amount} on "${gig.title}"`, link: '/my-gigs', io });
+    res.status(201).json({ bid });
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
-// ── @desc  Get gig bids ── GET /api/gigs/:id/bids ───────────────
-const getGigBids = async (req, res) => {
+// ── GET /api/gigs/:id/bids — Get bids ─────────────────────────
+const getBids = async (req, res) => {
   try {
     const gig = await Gig.findById(req.params.id);
     if (!gig) return res.status(404).json({ message: 'Gig not found' });
-    if (gig.client.toString() !== req.user._id.toString() && req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Not authorized' });
-
-    const bids = await Bid.find({ gig: req.params.id })
-      .populate('freelancer', 'name avatar rating location skills')
-      .sort({ createdAt: -1 });
-    res.json(bids);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+    if (gig.client.toString() !== req.user._id.toString() && req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+    const bids = await Bid.find({ gig: req.params.id }).populate('freelancer', 'name avatar rating completedProjects title location').sort('-createdAt').lean();
+    res.json({ bids });
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
-// ── @desc  Accept bid ── PATCH /api/gigs/:id/bids/:bidId/accept ─
+// ── PATCH /api/gigs/:gigId/bids/:bidId/accept ─────────────────
 const acceptBid = async (req, res) => {
   try {
-    const gig = await Gig.findById(req.params.id);
+    const gig = await Gig.findById(req.params.gigId);
     if (!gig) return res.status(404).json({ message: 'Gig not found' });
-    if (gig.client.toString() !== req.user._id.toString())
-      return res.status(403).json({ message: 'Not authorized' });
-
-    const bid = await Bid.findById(req.params.bidId).populate('freelancer', '_id name');
+    if (gig.client.toString() !== req.user._id.toString()) return res.status(403).json({ message: 'Not authorized' });
+    const bid = await Bid.findById(req.params.bidId);
     if (!bid) return res.status(404).json({ message: 'Bid not found' });
-
-    bid.status = 'accepted';
-    await bid.save();
-
-    // Reject all other pending bids
-    await Bid.updateMany(
-      { gig: req.params.id, _id: { $ne: bid._id }, status: 'pending' },
-      { status: 'rejected' }
-    );
-
-    // Update gig status
-    gig.status = 'active';
-    gig.acceptedBid = bid._id;
-    gig.assignedFreelancer = bid.freelancer._id;
-    await gig.save();
-
+    bid.status = 'accepted'; bid.acceptedAt = new Date(); await bid.save();
+    await Bid.updateMany({ gig: req.params.gigId, _id: { $ne: bid._id } }, { status: 'rejected' });
+    await Gig.findByIdAndUpdate(req.params.gigId, { status: 'active', assignedTo: bid.freelancer });
     const io = req.app.get('io');
-
-    // Notify accepted freelancer
-    await sendNotification({
-      userId:  bid.freelancer._id,
-      type:    'bid_accepted',
-      title:   '🎉 Your Bid was Accepted!',
-      message: `Your bid of ₹${bid.amount.toLocaleString()} for "${gig.title}" was accepted.`,
-      link:    `/chat?gigId=${gig._id}`,
-      io,
-    });
-
-    // Notify rejected freelancers
-    const rejectedBids = await Bid.find({ gig: req.params.id, status: 'rejected' }).select('freelancer');
-    await Promise.allSettled(
-      rejectedBids.map(rb =>
-        sendNotification({
-          userId:  rb.freelancer,
-          type:    'bid_rejected',
-          title:   'Bid Not Selected',
-          message: `Another freelancer was selected for "${gig.title}".`,
-          link:    `/gigs`,
-          io,
-        })
-      )
-    );
-
-    res.json({ message: 'Bid accepted', bid });
-
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+    await sendNotification({ userId: bid.freelancer, type: 'bid_accepted', title: 'Your Bid Was Accepted! 🎉', message: `Your bid on "${gig.title}" was accepted!`, link: '/my-proposals', io });
+    res.json({ bid });
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
-// ── @desc  Reject bid ── PATCH /api/gigs/:id/bids/:bidId/reject ─
-const rejectBid = async (req, res) => {
+// ── GET /api/gigs/my — Client's gigs ──────────────────────────
+const getMyGigs = async (req, res) => {
   try {
-    const gig = await Gig.findById(req.params.id);
-    if (!gig) return res.status(404).json({ message: 'Gig not found' });
-    if (gig.client.toString() !== req.user._id.toString())
-      return res.status(403).json({ message: 'Not authorized' });
-
-    const bid = await Bid.findById(req.params.bidId).populate('freelancer', '_id name');
-    if (!bid) return res.status(404).json({ message: 'Bid not found' });
-
-    bid.status = 'rejected';
-    await bid.save();
-
-    const io = req.app.get('io');
-    await sendNotification({
-      userId:  bid.freelancer._id,
-      type:    'bid_rejected',
-      title:   'Bid Not Selected',
-      message: `Your bid for "${gig.title}" was not selected. Keep applying!`,
-      link:    `/gigs`,
-      io,
-    });
-
-    res.json({ message: 'Bid rejected', bid });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+    const gigs = await Gig.find({ client: req.user._id }).sort('-createdAt').lean();
+    const gigsWithBids = await Promise.all(gigs.map(async g => ({ ...g, bidsCount: await Bid.countDocuments({ gig: g._id }) })));
+    res.json({ gigs: gigsWithBids });
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
-module.exports = {
-  createGig, getGigs, getCategories, getMyGigs, getMyBids,
-  getGig, updateGig, updateProgress, deleteGig,
-  placeBid, getGigBids, acceptBid, rejectBid,
+// ── GET /api/gigs/my-bids — Freelancer's bids ─────────────────
+const getMyBids = async (req, res) => {
+  try {
+    const bids = await Bid.find({ freelancer: req.user._id }).populate('gig', 'title budget status client category').sort('-createdAt').lean();
+    res.json({ bids });
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };
+
+module.exports = { createGig, getGigs, getGigById, updateGig, deleteGig, placeBid, getBids, acceptBid, getMyGigs, getMyBids };

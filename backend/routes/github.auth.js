@@ -21,7 +21,7 @@ const jwt            = require('jsonwebtoken');
 // ── Load User model ────────────────────────────────────────
 let User;
 try {
-  User = require('../models/User.model');
+  User = require('../models/index').User;
 } catch {
   const mongoose = require('mongoose');
   const s = new mongoose.Schema({

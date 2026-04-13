@@ -58,7 +58,7 @@ const awardBadge = async (userId, badgeId, io) => {
   await Badge.create({ user: userId, badge: cfg.id, milestone: cfg.name });
 
   // Add credits
-  const User = require('../models/User.model');
+  const User = require('../models/index').User;
   await User.findByIdAndUpdate(userId, { $inc: { credits: cfg.credits } });
 
   // Real-time notification
@@ -81,7 +81,7 @@ const checkReferralMilestones = async (userId, totalReferrals, io) => {
 // ══════════════════════════════════════════════════════════════
 router.get('/my-code', protect, async (req, res) => {
   try {
-    const User = require('../models/User.model');
+    const User = require('../models/index').User;
     let user   = await User.findById(req.user._id).select('referralCode credits');
     if (!user.referralCode) {
       user.referralCode = genCode(req.user._id);
@@ -111,7 +111,7 @@ router.post('/apply', protect, async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ message: 'Referral code required' });
 
-    const User    = require('../models/User.model');
+    const User    = require('../models/index').User;
     const referrer = await User.findOne({ referralCode: code.toUpperCase() });
     if (!referrer) return res.status(404).json({ message: 'Invalid referral code' });
     if (referrer._id.toString() === req.user._id.toString())

@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 // Inline schema
 let Notification;
 try {
-  Notification = require('../models/Notification.model');
+  Notification = require('../models/index').Notification;
 } catch {
   const schema = new mongoose.Schema({
     user:    { type: mongoose.Schema.Types.ObjectId, ref:'User', required:true, index:true },

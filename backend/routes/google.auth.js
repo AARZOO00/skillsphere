@@ -18,7 +18,7 @@ const jwt             = require('jsonwebtoken');
 
 let User;
 try {
-  User = require('../models/User.model');
+  User = require('../models/index').User;
 } catch {
   const mongoose = require('mongoose');
   User = mongoose.models.User;
